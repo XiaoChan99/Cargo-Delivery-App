@@ -332,9 +332,10 @@ class _HomePageState extends State<HomePage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Updated Header to match SchedulePage
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(12, 15, 12, 6),
+              padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -343,6 +344,10 @@ class _HomePageState extends State<HomePage> {
                     Color(0xFF1E40AF),
                     Color(0xFF3B82F6),
                   ],
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
                 ),
               ),
               child: Column(
@@ -375,8 +380,8 @@ class _HomePageState extends State<HomePage> {
                               ),
                               Text(
                                 _userData['driverId'] != null 
-                                  ? "Driver ID: ${_userData['driverId']}"
-                                  : "Port Driver",
+                                  ? "Driver No. ${_userData['driverId']}"
+                                  : "Driver",
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: Colors.white70,
@@ -438,7 +443,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   StreamBuilder<QuerySnapshot>(
                     stream: _firestore
                         .collection('tasks')
@@ -791,7 +796,7 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ],
-      ),
+      )
     );
   }
 

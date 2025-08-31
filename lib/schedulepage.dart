@@ -1,23 +1,102 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'homepage.dart';
 import 'live_location_page.dart';
 import 'container_details_page.dart';
 import 'status_update_page.dart';
-import 'package:cargo/livemap_page.dart';
-import 'package:cargo/settings_page.dart';
-class SchedulePage extends StatelessWidget {
+import 'livemap_page.dart';
+import 'settings_page.dart';
+
+class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
 
   @override
+  State<SchedulePage> createState() => _SchedulePageState();
+}
+
+class _SchedulePageState extends State<SchedulePage> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  Map<String, dynamic>? _driverData;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDriverData();
+  }
+
+  Future<void> _loadDriverData() async {
+    try {
+      final user = _auth.currentUser;
+      if (user != null) {
+        final driverDoc = await _firestore.collection('users').doc(user.uid).get();
+        if (driverDoc.exists) {
+          setState(() {
+            _driverData = driverDoc.data() as Map<String, dynamic>;
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading driver data: $e');
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+        return const Color(0xFF10B981);
+      case 'in progress':
+        return const Color(0xFFF59E0B);
+      case 'delayed':
+        return const Color(0xFFEF4444);
+      case 'delivered':
+        return const Color(0xFF10B981);
+      case 'pending':
+        return const Color(0xFF64748B);
+      default:
+        return const Color(0xFF64748B);
+    }
+  }
+
+  String _formatTime(Timestamp timestamp) {
+    final date = timestamp.toDate();
+    final hour = date.hour % 12;
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    return '${hour == 0 ? 12 : hour}:${date.minute.toString().padLeft(2, '0')} $period';
+  }
+
+  String _formatDate(Timestamp timestamp) {
+    final date = timestamp.toDate();
+    final months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    
+    return '${weekdays[date.weekday - 1]} ${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8FAFC),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Header with driver info
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(12, 15, 12, 6),
+              padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -26,6 +105,10 @@ class SchedulePage extends StatelessWidget {
                     Color(0xFF1E40AF),
                     Color(0xFF3B82F6),
                   ],
+                ),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
                 ),
               ),
               child: Column(
@@ -45,20 +128,20 @@ class SchedulePage extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 12),
-                          const Column(
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Kiro Basanal",
-                                style: TextStyle(
+                                _driverData?['fullName'] ?? 'Driver Name',
+                                style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.white,
                                 ),
                               ),
                               Text(
-                                "Port Driver",
-                                style: TextStyle(
+                                "Driver No. ${_driverData?['driverId'] ?? 'N/A'}",
+                                style: const TextStyle(
                                   fontSize: 12,
                                   color: Colors.white70,
                                 ),
@@ -67,168 +150,16 @@ class SchedulePage extends StatelessWidget {
                           ),
                         ],
                       ),
-                      Stack(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.notifications_outlined,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                          Positioned(
-                            right: 4,
-                            top: 4,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFEF4444),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
                   ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildStatusCard("4", "Delivered", const Color(0xFF10B981)),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatusCard("2", "Pending", const Color(0xFFF59E0B)),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildStatusCard("1", "Delayed", const Color(0xFFEF4444)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.white, Color(0xFFFAFBFF)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                  const SizedBox(height: 16),
                   const Text(
-                    "Tuesday July 9, 2025",
+                    "Today's Schedule",
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E293B),
+                      color: Colors.white,
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  _buildScheduleEntry(
-                    context,
-                    "08:00 AM",
-                    "Container No. HDG4ev3909",
-                    "Pick Up: Port Gate A",
-                    "Destination: Carcar",
-                    "Scheduled",
-                    const Color(0xFF10B981),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  _buildScheduleEntry(
-                    context,
-                    "10:30 AM",
-                    "Container No. BHG0948685",
-                    "Pick Up: Terminal B",
-                    "Destination: Alcoy",
-                    "In Progress",
-                    const Color(0xFFF59E0B),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF64748B).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.restaurant,
-                            color: Color(0xFF64748B),
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "12:30 PM - Lunch Break",
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF1E293B),
-                                ),
-                              ),
-                              Text(
-                                "1 Hour",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  _buildScheduleEntry(
-                    context,
-                    "02:00 PM",
-                    "Container No. YQG8866478",
-                    "Pick Up: Terminal A",
-                    "Destination: SM Seaside",
-                    "Delayed",
-                    const Color(0xFFEF4444),
                   ),
                 ],
               ),
@@ -236,6 +167,86 @@ class SchedulePage extends StatelessWidget {
             
             const SizedBox(height: 16),
             
+            // Today's Schedule Section
+            StreamBuilder<QuerySnapshot>(
+              stream: _firestore
+                  .collection('schedules')
+                  .where('driverId', isEqualTo: _auth.currentUser?.uid)
+                  .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day)))
+                  .where('date', isLessThanOrEqualTo: Timestamp.fromDate(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59)))
+                  .orderBy('date')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return _buildLoadingSchedule();
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return _buildNoSchedule();
+                }
+
+                final schedules = snapshot.data!.docs;
+                final firstSchedule = schedules.first.data() as Map<String, dynamic>;
+                final scheduleDate = firstSchedule['date'] as Timestamp;
+
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Colors.white, Color(0xFFFAFBFF)],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 20,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _formatDate(scheduleDate),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      
+                      ...schedules.map((doc) {
+                        final schedule = doc.data() as Map<String, dynamic>;
+                        return Column(
+                          children: [
+                            _buildScheduleEntry(
+                              context,
+                              _formatTime(schedule['date'] as Timestamp),
+                              schedule['containerNo'] ?? 'N/A',
+                              schedule['pickupLocation'] ?? 'N/A',
+                              schedule['destination'] ?? 'N/A',
+                              schedule['status'] ?? 'pending',
+                              _getStatusColor(schedule['status'] ?? 'pending'),
+                              doc.id,
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        );
+                      }).toList(),
+                    ],
+                  ),
+                );
+              },
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Delivery History Section
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.all(20),
@@ -283,36 +294,53 @@ class SchedulePage extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   
-                  _buildHistoryEntry(
-                    "July 8, 2025",
-                    "Container No. ABC123456",
-                    "Port Gate A → Carcar",
-                    "Delivered",
-                    const Color(0xFF10B981),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  _buildHistoryEntry(
-                    "July 7, 2025",
-                    "Container No. DEF789012",
-                    "Terminal B → Alcoy",
-                    "Delivered",
-                    const Color(0xFF10B981),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  _buildHistoryEntry(
-                    "July 6, 2025",
-                    "Container No. GHI345678",
-                    "Terminal A → SM Seaside",
-                    "Delayed",
-                    const Color(0xFFEF4444),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: _firestore
+                        .collection('delivery_history')
+                        .where('driverId', isEqualTo: _auth.currentUser?.uid)
+                        .orderBy('date', descending: true)
+                        .limit(3)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return const Text(
+                          'No delivery history',
+                          style: TextStyle(
+                            color: Color(0xFF64748B),
+                          ),
+                        );
+                      }
+
+                      final history = snapshot.data!.docs;
+
+                      return Column(
+                        children: history.map((doc) {
+                          final delivery = doc.data() as Map<String, dynamic>;
+                          return Column(
+                            children: [
+                              _buildHistoryEntry(
+                                _formatDate(delivery['date'] as Timestamp),
+                                delivery['containerNo'] ?? 'N/A',
+                                '${delivery['pickupLocation']} → ${delivery['destination']}',
+                                delivery['status'] ?? 'delivered',
+                                _getStatusColor(delivery['status'] ?? 'delivered'),
+                              ),
+                              if (history.last != doc) const SizedBox(height: 12),
+                            ],
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
                 ],
               ),
             ),
             
-            const SizedBox(height: 100), // Space for bottom navigation
+            const SizedBox(height: 100),
           ],
         ),
       ),
@@ -320,38 +348,60 @@ class SchedulePage extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusCard(String number, String label, Color color) {
+  Widget _buildLoadingSchedule() {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Text(
-            number,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Colors.white70,
-            ),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Color(0xFFFAFBFF)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
           ),
         ],
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildNoSchedule() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.white, Color(0xFFFAFBFF)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: const Text(
+        'No schedules for today',
+        style: TextStyle(
+          fontSize: 16,
+          color: Color(0xFF64748B),
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }
 
-  Widget _buildScheduleEntry(BuildContext context, String time, String container, String pickup, String destination, String status, Color statusColor) {
+  Widget _buildScheduleEntry(BuildContext context, String time, String container, String pickup, String destination, String status, Color statusColor, String scheduleId) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -436,8 +486,7 @@ class SchedulePage extends StatelessWidget {
                   onPressed: () {
                     Widget destinationPage;
                     
-                    if (status == "In Progress") {
-                      // Navigate to Live Location page for in-transit cargo
+                    if (status.toLowerCase() == "in progress") {
                       destinationPage = LiveLocationPage(
                         containerNo: container,
                         time: time,
@@ -445,8 +494,7 @@ class SchedulePage extends StatelessWidget {
                         destination: destination,
                         status: status,
                       );
-                    } else if (status == "Scheduled") {
-                      // Navigate to Container Details page for scheduled cargo
+                    } else if (status.toLowerCase() == "scheduled") {
                       destinationPage = ContainerDetailsPage(
                         containerNo: container,
                         time: time,
@@ -454,8 +502,7 @@ class SchedulePage extends StatelessWidget {
                         destination: destination,
                         status: status,
                       );
-                    } else if (status == "Delayed") {
-                      // Navigate to Status Update page for delayed cargo
+                    } else if (status.toLowerCase() == "delayed") {
                       destinationPage = StatusUpdatePage(
                         containerNo: container,
                         time: time,
@@ -464,7 +511,6 @@ class SchedulePage extends StatelessWidget {
                         currentStatus: status,
                       );
                     } else {
-                      // Default to Container Details for other statuses
                       destinationPage = ContainerDetailsPage(
                         containerNo: container,
                         time: time,
@@ -488,7 +534,7 @@ class SchedulePage extends StatelessWidget {
                   ),
                 ),
               ),
-              if (status == "Delayed") ...[
+              if (status.toLowerCase() == "delayed") ...[
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton(
@@ -526,78 +572,6 @@ class SchedulePage extends StatelessWidget {
                 ),
               ],
             ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomNavigation(BuildContext context, int currentIndex) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: BottomNavigationBar(
-        currentIndex: currentIndex,
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: Colors.white,
-        selectedItemColor: const Color(0xFF3B82F6),
-        unselectedItemColor: const Color(0xFF64748B),
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        onTap: (index) {
-          switch (index) {
-            case 0:
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const HomePage()),
-              );
-              break;
-            case 1:
-              // Already on Schedule page
-              break;
-            case 2:
-              // Navigate to Live Map - placeholder for now
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const LiveMapPage()),
-              );
-              break;
-            case 3:
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsPage()),
-              );
-              break;
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.schedule_outlined),
-            activeIcon: Icon(Icons.schedule),
-            label: 'Schedule',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined),
-            activeIcon: Icon(Icons.map),
-            label: 'Live Map',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: 'Settings',
           ),
         ],
       ),
@@ -665,6 +639,76 @@ class SchedulePage extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNavigation(BuildContext context, int currentIndex) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: BottomNavigationBar(
+        currentIndex: currentIndex,
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFF3B82F6),
+        unselectedItemColor: const Color(0xFF64748B),
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
+        onTap: (index) {
+          switch (index) {
+            case 0:
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const HomePage()),
+              );
+              break;
+            case 1:
+              break;
+            case 2:
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const LiveMapPage()),
+              );
+              break;
+            case 3:
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const SettingsPage()),
+              );
+              break;
+          }
+        },
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.schedule_outlined),
+            activeIcon: Icon(Icons.schedule),
+            label: 'Schedule',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.map_outlined),
+            activeIcon: Icon(Icons.map),
+            label: 'Live Map',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            activeIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
