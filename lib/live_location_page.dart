@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'livemap_page.dart'; // Import the map widget
+import 'package:latlong2/latlong.dart';
+import 'livemap_page.dart';
 
 class LiveLocationPage extends StatelessWidget {
   final String containerNo;
@@ -20,6 +21,26 @@ class LiveLocationPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Create realistic drivable routes using major highways and roads
+    final LatLng manilaPort = const LatLng(14.5832, 120.9695); // Manila South Harbor
+    final LatLng batangasPort = const LatLng(13.7565, 121.0583); // Batangas Port
+    final LatLng cebuPort = const LatLng(10.3157, 123.8854); // Cebu Port
+    final LatLng davaoPort = const LatLng(7.1378, 125.6143); // Davao Sasa Port
+    final LatLng subicPort = const LatLng(14.7942, 120.2799); // Subic Port
+    
+    // Manila to Batangas route (via SLEX and STAR Tollway)
+    List<LatLng> deliveryRoute = [
+      manilaPort,
+      const LatLng(14.5200, 121.0000), // Entering SLEX
+      const LatLng(14.4500, 121.0200), // SLEX towards Calamba
+      const LatLng(14.2000, 121.1000), // STAR Tollway entrance
+      const LatLng(14.0000, 121.1500), // STAR Tollway
+      const LatLng(13.9000, 121.1200), // Approaching Batangas
+      batangasPort,
+    ];
+    
+    List<LatLng> ports = [manilaPort, cebuPort, davaoPort, subicPort, batangasPort];
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SingleChildScrollView(
@@ -121,7 +142,11 @@ class LiveLocationPage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
-                    child: LiveMapWidget(), // Use the map widget here
+                    child: LiveMapWidget(
+                      deliveryRoute: deliveryRoute,
+                      ports: ports,
+                      truckLocation: const LatLng(14.3000, 121.0800), // Current truck position
+                    ),
                   ),
                 ],
               ),
@@ -210,7 +235,7 @@ class LiveLocationPage extends StatelessWidget {
                 ),
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
-                  BoxShadow(
+                                  BoxShadow(
                     color: Colors.black.withOpacity(0.08),
                     blurRadius: 20,
                     offset: const Offset(0, 4),
@@ -248,7 +273,6 @@ class LiveLocationPage extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFFEF4444),
                         ),
                       ),
                     ],
@@ -441,7 +465,7 @@ class LiveLocationPage extends StatelessWidget {
         ],
       ),
       child: BottomNavigationBar(
-        currentIndex: currentIndex == -1 ? 1 : currentIndex, // Set to Schedule tab
+        currentIndex: currentIndex == -1 ? 1 : currentIndex,
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
         selectedItemColor: const Color(0xFF3B82F6),
@@ -454,13 +478,13 @@ class LiveLocationPage extends StatelessWidget {
               Navigator.pushReplacementNamed(context, '/home');
               break;
             case 1:
-              Navigator.pop(context); // Go back to Schedule page
+              Navigator.pop(context);
               break;
             case 2:
-               Navigator.pushReplacementNamed(context, '/livemap');
+              Navigator.pushReplacementNamed(context, '/livemap');
               break;
             case 3:
-               Navigator.pushReplacementNamed(context, '/settings');
+              Navigator.pushReplacementNamed(context, '/settings');
               break;
           }
         },
@@ -645,6 +669,3 @@ class _QRScannerPageState extends State<QRScannerPage> {
     super.dispose();
   }
 }
-  @override
-  bool shouldRepaint(CustomPainter oldDelegate) => false;
-

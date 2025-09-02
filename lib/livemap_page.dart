@@ -19,18 +19,73 @@ class _LiveMapPageState extends State<LiveMapPage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   
-  LatLng _truckLocation = const LatLng(14.5547, 121.0244); // Default location
+  LatLng _truckLocation = const LatLng(14.5547, 121.0244);
   String _driverName = "Loading...";
   String _driverNo = "Loading...";
   bool _isMapMinimized = false;
   bool _isLoading = true;
   String? _errorMessage;
+  bool _showCargoDetails = false;
+  Map<String, dynamic> _cargoData = {};
+  
+  final LatLng _manilaPort = const LatLng(14.5832, 120.9695);
+  final LatLng _cebuPort = const LatLng(10.3157, 123.8854);
+  final LatLng _davaoPort = const LatLng(7.1378, 125.6143);
+  final LatLng _subicPort = const LatLng(14.7942, 120.2799);
+  final LatLng _batangasPort = const LatLng(13.7565, 121.0583);
+  
+  List<LatLng> _deliveryRoute = [];
   
   @override
   void initState() {
     super.initState();
     _fetchDriverData();
     _setupLocationListener();
+    _generateRealisticDeliveryRoute();
+    _loadCargoData();
+  }
+  
+  void _loadCargoData() {
+    // Simulate cargo data - in real app, fetch from Firestore
+    setState(() {
+      _cargoData = {
+        'containerNo': 'CNTR456789',
+        'contents': 'Electronics',
+        'weight': '3,200kg',
+        'destination': 'Batangas Port',
+        'eta': '11:15 AM',
+        'status': 'In Transit',
+        'temperature': '20°C',
+        'hazardous': 'No',
+        'sealNumber': 'SEAL123K'
+      };
+    });
+  }
+  
+  void _generateRealisticDeliveryRoute() {
+    _deliveryRoute = [
+      _manilaPort,
+      const LatLng(14.5200, 121.0000),
+      const LatLng(14.4500, 121.0200),
+      const LatLng(14.2000, 121.1000),
+      const LatLng(14.0000, 121.1500),
+      const LatLng(13.9000, 121.1200),
+      _batangasPort,
+      
+      const LatLng(13.7000, 121.0500),
+      const LatLng(12.8000, 121.5000),
+      const LatLng(12.0000, 122.0000),
+      const LatLng(11.3000, 123.0000),
+      const LatLng(10.6000, 123.5000),
+      _cebuPort,
+      
+      const LatLng(10.2000, 123.8000),
+      const LatLng(9.5000, 124.0000),
+      const LatLng(8.8000, 124.5000),
+      const LatLng(8.0000, 125.0000),
+      const LatLng(7.5000, 125.3000),
+      _davaoPort,
+    ];
   }
   
   void _fetchDriverData() async {
@@ -49,7 +104,6 @@ class _LiveMapPageState extends State<LiveMapPage> {
             _driverName = data['fullName'] ?? "Driver";
             _driverNo = data['driverId'] ?? "Driver ID";
             
-            // Check if location field exists before accessing it
             if (data.containsKey('location')) {
               var locationData = data['location'];
               if (locationData != null) {
@@ -93,7 +147,6 @@ class _LiveMapPageState extends State<LiveMapPage> {
         if (snapshot.exists && snapshot.data() != null) {
           Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
           
-          // Check if location field exists
           if (data.containsKey('location')) {
             var locationData = data['location'];
             if (locationData != null) {
@@ -104,7 +157,6 @@ class _LiveMapPageState extends State<LiveMapPage> {
                 _truckLocation = LatLng(lat, lng);
               });
               
-              // Optionally move map to new location
               _mapController.move(_truckLocation, _mapController.camera.zoom);
             }
           }
@@ -113,6 +165,18 @@ class _LiveMapPageState extends State<LiveMapPage> {
         print("Error in location listener: $error");
       });
     }
+  }
+
+  void _showCargoDetailsModal() {
+    setState(() {
+      _showCargoDetails = true;
+    });
+  }
+
+  void _hideCargoDetailsModal() {
+    setState(() {
+      _showCargoDetails = false;
+    });
   }
 
   @override
@@ -149,180 +213,291 @@ class _LiveMapPageState extends State<LiveMapPage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: Column(
+      body: Stack(
         children: [
-          // Header matching the SchedulePage
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF1E40AF),
-                  Color(0xFF3B82F6),
-                ],
-              ),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(16),
-                bottomRight: Radius.circular(16),
-              ),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            children: [
+              // Header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF1E40AF),
+                      Color(0xFF3B82F6),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+                child: Column(
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Colors.white.withOpacity(0.2),
-                          child: const Icon(
-                            Icons.person,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        Row(
                           children: [
-                            Text(
-                              _driverName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              child: const Icon(
+                                Icons.person,
                                 color: Colors.white,
+                                size: 20,
                               ),
                             ),
-                            Text(
-                              "Driver No. $_driverNo",
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                              ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _driverName,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                Text(
+                                  "Driver No. $_driverNo",
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
+                        IconButton(
+                          onPressed: () {
+                            setState(() {
+                              _isMapMinimized = !_isMapMinimized;
+                            });
+                          },
+                          icon: Icon(
+                            _isMapMinimized ? Icons.expand : Icons.minimize,
+                            color: Colors.white,
+                          ),
+                        ),
                       ],
                     ),
-                    IconButton(
-                      onPressed: () {
-                        setState(() {
-                          _isMapMinimized = !_isMapMinimized;
-                        });
-                      },
-                      icon: Icon(
-                        _isMapMinimized ? Icons.expand : Icons.minimize,
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Live Map",
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
                         color: Colors.white,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  "Live Map",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
+              ),
+              
+              // Map
+              Expanded(
+                child: Stack(
+                  children: [
+                    LiveMapWidget(
+                      truckLocation: _truckLocation,
+                      mapController: _mapController,
+                      isMinimized: _isMapMinimized,
+                      deliveryRoute: _deliveryRoute,
+                      ports: [_manilaPort, _cebuPort, _davaoPort, _subicPort, _batangasPort],
+                      onTruckTap: _showCargoDetailsModal,
+                    ),
+                    
+                    // Map controls
+                    Positioned(
+                      bottom: 16,
+                      right: 16,
+                      child: Column(
+                        children: [
+                          _buildMapControl(Icons.add, () {
+                            _mapController.move(
+                              _mapController.camera.center,
+                              _mapController.camera.zoom + 1,
+                            );
+                          }),
+                          const SizedBox(height: 8),
+                          _buildMapControl(Icons.remove, () {
+                            _mapController.move(
+                              _mapController.camera.center,
+                              _mapController.camera.zoom - 1,
+                            );
+                          }),
+                          const SizedBox(height: 8),
+                          _buildMapControl(Icons.my_location, () {
+                            _mapController.move(_truckLocation, 12.0);
+                          }),
+                        ],
+                      ),
+                    ),
+                    
+                    // Legend
+                    Positioned(
+                      top: 16,
+                      left: 16,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.1),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              "Legend",
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            SizedBox(height: 8),
+                            LegendItem(
+                              color: Color(0xFF10B981),
+                              label: "Available Ports",
+                            ),
+                            LegendItem(
+                              color: Color(0xFF3B82F6),
+                              label: "Destination",
+                            ),
+                            LegendItem(
+                              color: Color(0xFFF59E0B),
+                              label: "Your Location",
+                            ),
+                            LegendItem(
+                              color: Color(0xFFEF4444),
+                              label: "Delivery Route",
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+
+          // Cargo Details Modal
+          if (_showCargoDetails)
+            Positioned(
+              bottom: 20,
+              left: 20,
+              right: 20,
+              child: _buildCargoDetailsModal(),
+            ),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomNavigation(context, 2),
+    );
+  }
+
+  Widget _buildCargoDetailsModal() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Cargo Details",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              IconButton(
+                onPressed: _hideCargoDetailsModal,
+                icon: const Icon(Icons.close, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildCargoDetailRow("Container No.", _cargoData['containerNo'] ?? 'N/A'),
+          _buildCargoDetailRow("Contents", _cargoData['contents'] ?? 'N/A'),
+          _buildCargoDetailRow("Weight", _cargoData['weight'] ?? 'N/A'),
+          _buildCargoDetailRow("Destination", _cargoData['destination'] ?? 'N/A'),
+          _buildCargoDetailRow("ETA", _cargoData['eta'] ?? 'N/A'),
+          _buildCargoDetailRow("Status", _cargoData['status'] ?? 'N/A'),
+          _buildCargoDetailRow("Temperature", _cargoData['temperature'] ?? 'N/A'),
+          _buildCargoDetailRow("Hazardous", _cargoData['hazardous'] ?? 'N/A'),
+          _buildCargoDetailRow("Seal Number", _cargoData['sealNumber'] ?? 'N/A'),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _hideCargoDetailsModal,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B82F6),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 48),
+            ),
+            child: const Text("Close Details"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCargoDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              "$label:",
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
             ),
           ),
-          
-          // Map using the LiveMapWidget
           Expanded(
-            child: Stack(
-              children: [
-                LiveMapWidget(
-                  truckLocation: _truckLocation,
-                  mapController: _mapController,
-                  isMinimized: _isMapMinimized,
-                ),
-                
-                // Map controls positioned inside the map
-                Positioned(
-                  bottom: 16,
-                  right: 16,
-                  child: Column(
-                    children: [
-                      _buildMapControl(Icons.add, () {
-                        _mapController.move(
-                          _mapController.camera.center,
-                          _mapController.camera.zoom + 1,
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      _buildMapControl(Icons.remove, () {
-                        _mapController.move(
-                          _mapController.camera.center,
-                          _mapController.camera.zoom - 1,
-                        );
-                      }),
-                      const SizedBox(height: 8),
-                      _buildMapControl(Icons.my_location, () {
-                        _mapController.move(_truckLocation, 12.0);
-                      }),
-                    ],
-                  ),
-                ),
-                
-                // Legend positioned inside the map
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          "Legend",
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF1E293B),
-                          ),
-                        ),
-                        SizedBox(height: 8),
-                        LegendItem(
-                          color: Color(0xFF10B981),
-                          label: "Available Ports",
-                        ),
-                        LegendItem(
-                          color: Color(0xFF3B82F6),
-                          label: "Destination",
-                        ),
-                        LegendItem(
-                          color: Color(0xFFF59E0B),
-                          label: "Your Location",
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+            flex: 3,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                color: Color(0xFF1E293B),
+              ),
             ),
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomNavigation(context, 2),
     );
   }
 
@@ -388,7 +563,6 @@ class _LiveMapPageState extends State<LiveMapPage> {
               );
               break;
             case 2:
-              // Already on Live Map page
               break;
             case 3:
               Navigator.pushReplacement(
@@ -429,47 +603,92 @@ class MapMarker extends StatelessWidget {
   final String label;
   final Color color;
   final IconData icon;
+  final bool isTruck;
+  final VoidCallback? onTap;
 
   const MapMarker({
     super.key,
     required this.label,
     required this.color,
     this.icon = Icons.location_on,
+    this.isTruck = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 1),
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF1E293B),
               ),
-            ],
-          ),
-          child: Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1E293B),
             ),
           ),
-        ),
-        Icon(
-          icon,
-          color: color,
-          size: 24,
-        ),
-      ],
+          if (isTruck)
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Icon(
+                    Icons.local_shipping,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                  Positioned(
+                    left: 4,
+                    top: 6,
+                    child: Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.yellow[700],
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -518,6 +737,9 @@ class LiveMapWidget extends StatelessWidget {
   final MapController? mapController;
   final bool isMinimized;
   final double height;
+  final List<LatLng> deliveryRoute;
+  final List<LatLng> ports;
+  final VoidCallback? onTruckTap;
 
   const LiveMapWidget({
     super.key,
@@ -525,12 +747,13 @@ class LiveMapWidget extends StatelessWidget {
     this.mapController,
     this.isMinimized = false,
     this.height = double.infinity,
+    required this.deliveryRoute,
+    required this.ports,
+    this.onTruckTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final LatLng portA = const LatLng(14.5995, 120.9842); // Manila Port
-    final LatLng portB = const LatLng(10.3157, 123.8854); // Cebu Port
     final LatLng currentTruckLocation = truckLocation ?? const LatLng(14.5547, 121.0244);
 
     return AnimatedContainer(
@@ -538,7 +761,7 @@ class LiveMapWidget extends StatelessWidget {
       height: isMinimized ? 200 : MediaQuery.of(context).size.height - 200,
       width: double.infinity,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(0), // Remove border radius for full-width
+        borderRadius: BorderRadius.circular(0),
         child: FlutterMap(
           mapController: mapController,
           options: MapOptions(
@@ -554,34 +777,76 @@ class LiveMapWidget extends StatelessWidget {
               userAgentPackageName: 'com.example.cargo_app',
               maxNativeZoom: 19,
             ),
+            
+            PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: deliveryRoute,
+                  color: const Color(0xFFEF4444).withOpacity(0.7),
+                  strokeWidth: 4.0,
+                  borderColor: Colors.white.withOpacity(0.5),
+                  borderStrokeWidth: 1.0,
+                ),
+              ],
+            ),
+            
             MarkerLayer(
               markers: [
                 Marker(
-                  point: portA,
+                  point: ports[0],
                   width: 80,
                   height: 80,
                   child: const MapMarker(
-                    label: "Port A",
+                    label: "Manila Port",
                     color: Color(0xFF10B981),
                   ),
                 ),
                 Marker(
-                  point: portB,
+                  point: ports[1],
                   width: 80,
                   height: 80,
                   child: const MapMarker(
-                    label: "Port B",
+                    label: "Cebu Port",
                     color: Color(0xFF3B82F6),
                   ),
                 ),
                 Marker(
-                  point: currentTruckLocation,
+                  point: ports[2],
                   width: 80,
                   height: 80,
                   child: const MapMarker(
-                    label: "Truck Location",
-                    color: Color(0xFFF59E0B),
-                    icon: Icons.local_shipping,
+                    label: "Davao Port",
+                    color: Color(0xFF3B82F6),
+                  ),
+                ),
+                Marker(
+                  point: ports[3],
+                  width: 80,
+                  height: 80,
+                  child: const MapMarker(
+                    label: "Subic Port",
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+                Marker(
+                  point: ports[4],
+                  width: 80,
+                  height: 80,
+                  child: const MapMarker(
+                    label: "Batangas Port",
+                    color: Color(0xFF10B981),
+                  ),
+                ),
+                
+                Marker(
+                  point: currentTruckLocation,
+                  width: 80,
+                  height: 80,
+                  child: MapMarker(
+                    label: "Your Truck",
+                    color: const Color(0xFFF59E0B),
+                    isTruck: true,
+                    onTap: onTruckTap,
                   ),
                 ),
               ],
