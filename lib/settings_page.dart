@@ -26,9 +26,10 @@ class _SettingsPageState extends State<SettingsPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Settings header section
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(12, 15, 12, 6),
+              padding: const EdgeInsets.fromLTRB(12, 20, 12, 20),
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
@@ -43,30 +44,19 @@ class _SettingsPageState extends State<SettingsPage> {
                   bottomRight: Radius.circular(24),
                 ),
               ),
-              child: Column(
+              child: const Column(
                 children: [
-                  const SizedBox(height: 12),
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: Colors.white.withOpacity(0.2),
-                    child: const Icon(
-                      Icons.person,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    "Kiro Basanal",
+                  Text(
+                    "Settings",
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 24,
                       fontWeight: FontWeight.w700,
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    "Driver No. ABC-123",
+                  SizedBox(height: 4),
+                  Text(
+                    "Manage your account preferences",
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white70,
