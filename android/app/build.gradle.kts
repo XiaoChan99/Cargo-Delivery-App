@@ -7,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.cargo"
+    namespace = "com.gothong.firedb"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "27.0.12077973"
 
@@ -21,7 +21,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.cargo"
+        applicationId = "com.gothong.firedb"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

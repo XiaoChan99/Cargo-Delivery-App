@@ -382,58 +382,104 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _showForgotPasswordDialog() async {
     final emailController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    bool isLoading = false;
+    
+    // Store the context in a variable to ensure it's available
+    final currentContext = context;
     
     await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Reset Password"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Enter your email address to receive a password reset link."),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: emailController,
-              keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(),
+      context: currentContext,
+      builder: (context) => StatefulBuilder(
+        builder: (dialogContext, setState) {
+          return AlertDialog(
+            title: const Text("Reset Password"),
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text("Enter your email address to receive a password reset link."),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: "Email",
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your email';
+                      }
+                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                        return 'Please enter a valid email';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter your email';
-                }
-                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                  return 'Please enter a valid email';
-                }
-                return null;
-              },
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (emailController.text.isNotEmpty) {
-                try {
-                  await FirebaseAuth.instance.sendPasswordResetEmail(
-                    email: emailController.text.trim(),
-                  );
-                  Navigator.pop(context);
-                  _showNotification("Password reset email sent. Check your inbox.", true);
-                } catch (e) {
-                  Navigator.pop(context);
-                  _showNotification("Error sending reset email. Please try again.", false);
-                }
-              }
-            },
-            child: const Text("Send Reset Link"),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(dialogContext),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: isLoading 
+                    ? null 
+                    : () async {
+                  if (formKey.currentState!.validate()) {
+                    setState(() {
+                      isLoading = true;
+                    });
+                    
+                    try {
+                      await FirebaseAuth.instance.sendPasswordResetEmail(
+                        email: emailController.text.trim(),
+                      );
+                      
+                      // Use dialogContext to pop the dialog
+                      Navigator.pop(dialogContext);
+                      
+                      // Show success message using the original context
+                      _showNotification("Password reset email sent. Check your inbox.", true);
+                    } on FirebaseAuthException catch (e) {
+                      String errorMessage;
+                      switch (e.code) {
+                        case 'user-not-found':
+                          errorMessage = 'No account found with this email.';
+                          break;
+                        case 'invalid-email':
+                          errorMessage = 'Invalid email address.';
+                          break;
+                        default:
+                          errorMessage = 'Error sending reset email: ${e.message}';
+                      }
+                      
+                      // Show error message using the original context
+                      _showNotification(errorMessage, false);
+                    } catch (e) {
+                      // Show error message using the original context
+                      _showNotification("Error sending reset email. Please try again.", false);
+                    }
+                  }
+                },
+                child: isLoading
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : const Text("Send Reset Link"),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

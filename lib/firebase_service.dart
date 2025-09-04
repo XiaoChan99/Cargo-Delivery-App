@@ -12,9 +12,9 @@ class FirebaseService {
       await Firebase.initializeApp(
         options: const FirebaseOptions(
           apiKey: "YOUR_API_KEY",
-          appId: "1:504667552703:android:18afcba538a7648c91bf0a",
+          appId: "1:497593435460:android:eec4c28e83a95d25850311",
           messagingSenderId: "YOUR_SENDER_ID",
-          projectId: "cargo-delivery-app-b0f42",
+          projectId: "gothong-congestion-management",
           // Add these for web if needed:
           // authDomain: "your-project.firebaseapp.com",
           // storageBucket: "your-project.appspot.com",

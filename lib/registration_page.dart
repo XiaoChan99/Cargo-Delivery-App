@@ -18,22 +18,22 @@ class RegistrationPage extends StatefulWidget {
 
 class _RegistrationPageState extends State<RegistrationPage> {
   final _formKey = GlobalKey<FormState>();
-  final _driverIdController = TextEditingController();
-  final _fullNameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _driverLicenseController = TextEditingController();
   
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
   bool _isUploading = false;
   bool _firebaseInitialized = false;
-  String? _licenseFileName;
-  String? _licenseFileBase64;
+  String? _avatarFileName;
+  String? _avatarFileBase64;
   double _uploadProgress = 0.0;
   String? _initializationError;
+  // Removed role selection since we only have 'shipper'
 
   @override
   void initState() {
@@ -43,7 +43,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
   Future<void> _checkFirebaseInitialization() async {
     try {
-      // Check if Firebase is already initialized
       if (Firebase.apps.isNotEmpty) {
         setState(() {
           _firebaseInitialized = true;
@@ -64,7 +63,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
   Future<void> _pickAndEncodeImage() async {
     try {
       Uint8List? imageBytes;
-      String fileName = 'driver_license.jpg';
+      String fileName = 'avatar.jpg';
 
       if (kIsWeb) {
         final result = await FilePicker.platform.pickFiles(
@@ -90,7 +89,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         throw Exception('Failed to process image');
       }
 
-      // Check file size
       if (imageBytes.length > 2 * 1024 * 1024) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('❌ Image too large. Please select a smaller image.')),
@@ -102,18 +100,16 @@ class _RegistrationPageState extends State<RegistrationPage> {
         _isUploading = true;
       });
 
-      // Convert to base64
       final String base64Image = base64Encode(imageBytes);
       
       setState(() {
-        _licenseFileName = fileName;
-        _licenseFileBase64 = base64Image;
-        _driverLicenseController.text = 'Image Ready';
+        _avatarFileName = fileName;
+        _avatarFileBase64 = base64Image;
         _isUploading = false;
       });
       
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ License image ready! (${(imageBytes.length / 1024).toStringAsFixed(0)}KB)')),
+        SnackBar(content: Text('✅ Avatar image ready! (${(imageBytes.length / 1024).toStringAsFixed(0)}KB)')),
       );
 
     } catch (e) {
@@ -164,17 +160,15 @@ class _RegistrationPageState extends State<RegistrationPage> {
           .collection('users')
           .doc(userId)
           .set({
-        'uid': userId,
-        'driverId': _driverIdController.text.trim(),
-        'fullName': _fullNameController.text.trim(),
+        'firebase_uid': userId,
+        'first_name': _firstNameController.text.trim(),
+        'last_name': _lastNameController.text.trim(),
         'email': _emailController.text.trim(),
-        'driverLicenseInfo': _driverLicenseController.text.trim(),
-        'licenseImageBase64': _licenseFileBase64 ?? '',
-        'licenseFileName': _licenseFileName ?? '',
-        'createdAt': DateTime.now().toIso8601String(),
-        'role': 'driver',
-        'emailVerified': false,
-        'status': 'pending',
+        'role': 'shipper', // Fixed to 'shipper' only
+        'avatar': _avatarFileBase64 != null ? 'data:image/jpeg;base64,$_avatarFileBase64' : null,
+        'created_at': DateTime.now().toIso8601String(),
+        'last_seen': null,
+        'created_by': null, // Set to null as this is a registration
       });
 
       print("User data saved to Firestore successfully");
@@ -323,7 +317,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       child: Column(
                         children: [
                           Text(
-                            "Create Account",
+                            "Create Shipper Account",
                             style: TextStyle(
                               fontSize: 28,
                               fontWeight: FontWeight.w700,
@@ -374,18 +368,18 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     const SizedBox(height: 20),
                     
                     _buildTextField(
-                      controller: _driverIdController,
-                      label: "Driver ID",
-                      hint: "Enter your driver ID",
-                      icon: Icons.badge_outlined,
-                      iconColor: const Color(0xFFF59E0B),
+                      controller: _firstNameController,
+                      label: "First Name",
+                      hint: "Enter your first name",
+                      icon: Icons.person_outline,
+                      iconColor: const Color(0xFF8B5CF6),
                     ),
                     const SizedBox(height: 16),
                     
                     _buildTextField(
-                      controller: _fullNameController,
-                      label: "Full Name",
-                      hint: "Enter your full name",
+                      controller: _lastNameController,
+                      label: "Last Name",
+                      hint: "Enter your last name",
                       icon: Icons.person_outline,
                       iconColor: const Color(0xFF8B5CF6),
                     ),
@@ -408,7 +402,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 32),
                     
                     _buildPasswordField(
                       controller: _passwordController,
@@ -455,7 +449,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     const SizedBox(height: 16),
                     
                     Text(
-                      "Driver License Image",
+                      "Profile Avatar (Optional)",
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -467,10 +461,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       children: [
                         Expanded(
                           child: TextFormField(
-                            controller: _driverLicenseController,
                             readOnly: true,
                             decoration: InputDecoration(
-                              hintText: _licenseFileName ?? "Upload driver license image",
+                              hintText: _avatarFileName ?? "Upload profile picture (optional)",
                               prefixIcon: Container(
                                 margin: const EdgeInsets.all(12),
                                 padding: const EdgeInsets.all(8),
@@ -500,12 +493,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                               ),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
                             ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please upload your driver license image';
-                              }
-                              return null;
-                            },
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -543,10 +530,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
                       ),
                     ],
-                    if (_licenseFileName != null) ...[
+                    if (_avatarFileName != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Uploaded: $_licenseFileName',
+                        'Uploaded: $_avatarFileName',
                         style: const TextStyle(
                           color: Colors.green,
                           fontSize: 12,
@@ -766,12 +753,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
   @override
   void dispose() {
-    _driverIdController.dispose();
-    _fullNameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _driverLicenseController.dispose();
     super.dispose();
   }
 }
