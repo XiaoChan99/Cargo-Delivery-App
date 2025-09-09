@@ -5,6 +5,7 @@ import 'schedulepage.dart';
 import 'livemap_page.dart';
 import 'settings_page.dart';
 import 'notifications_page.dart';
+import 'dart:convert'; 
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -20,6 +21,7 @@ class _HomePageState extends State<HomePage> {
   Map<String, dynamic> _userData = {};
   int _notificationCount = 0;
   List<Map<String, dynamic>> _upcomingTasks = [];
+  List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = true;
   String? _errorMessage;
   
@@ -35,6 +37,7 @@ class _HomePageState extends State<HomePage> {
     _currentUser = _auth.currentUser;
     if (_currentUser != null) {
       _loadData();
+      _setupNotificationsListener();
     } else {
       _isLoading = false;
       _errorMessage = "User not authenticated";
@@ -61,19 +64,65 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  void _setupNotificationsListener() {
+    if (_currentUser != null) {
+      _firestore
+          .collection('notifications')
+          .where('userId', isEqualTo: _currentUser!.uid)
+          .orderBy('timestamp', descending: true)
+          .snapshots()
+          .listen((snapshot) {
+        if (mounted) {
+          List<Map<String, dynamic>> notifications = [];
+          for (var doc in snapshot.docs) {
+            var notification = doc.data() as Map<String, dynamic>;
+            notifications.add({
+              ...notification,
+              'id': doc.id,
+            });
+          }
+
+          setState(() {
+            _notifications = notifications;
+            _notificationCount = notifications.where((n) => n['read'] == false).length;
+          });
+        }
+      });
+    }
+  }
+
   Future<void> _loadUserData() async {
     if (_currentUser != null) {
       try {
-        DocumentSnapshot userDoc = await _firestore
-            .collection('users')
+        // First try to get user data from Drivers collection
+        DocumentSnapshot driverDoc = await _firestore
+            .collection('Drivers')
             .doc(_currentUser!.uid)
             .get();
         
-        if (userDoc.exists) {
+        if (driverDoc.exists) {
           setState(() {
-            _userData = userDoc.data() as Map<String, dynamic>;
+            _userData = driverDoc.data() as Map<String, dynamic>;
           });
+          return;
         }
+        
+        // If not found in Drivers, try Couriers collection
+        DocumentSnapshot courierDoc = await _firestore
+            .collection('Couriers')
+            .doc(_currentUser!.uid)
+            .get();
+        
+        if (courierDoc.exists) {
+          setState(() {
+            _userData = courierDoc.data() as Map<String, dynamic>;
+          });
+          return;
+        }
+        
+        // If user not found in either collection
+        print('User data not found in Firestore');
+        
       } catch (e) {
         print('Error loading user data: $e');
       }
@@ -83,23 +132,25 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadNotifications() async {
     if (_currentUser != null) {
       try {
-        // Temporary workaround while index is building
         QuerySnapshot notificationsSnapshot = await _firestore
             .collection('notifications')
             .where('userId', isEqualTo: _currentUser!.uid)
+            .orderBy('timestamp', descending: true)
+            .limit(5)
             .get();
 
-        // Filter unread notifications locally
-        int unreadCount = 0;
+        List<Map<String, dynamic>> notifications = [];
         for (var doc in notificationsSnapshot.docs) {
           var notification = doc.data() as Map<String, dynamic>;
-          if (notification['read'] == false) {
-            unreadCount++;
-          }
+          notifications.add({
+            ...notification,
+            'id': doc.id,
+          });
         }
 
         setState(() {
-          _notificationCount = unreadCount;
+          _notifications = notifications;
+          _notificationCount = notifications.where((n) => n['read'] == false).length;
         });
       } catch (e) {
         print('Error loading notifications: $e');
@@ -295,6 +346,115 @@ class _HomePageState extends State<HomePage> {
     return '$hour:$minute $period';
   }
 
+  String _formatTimeAgo(Timestamp timestamp) {
+    final now = DateTime.now();
+    final time = timestamp.toDate();
+    final difference = now.difference(time);
+
+    if (difference.inMinutes < 1) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes} minutes ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours} hours ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else {
+      return '${time.day}/${time.month}/${time.year}';
+    }
+  }
+
+  IconData _getNotificationIcon(String type) {
+    switch (type) {
+      case 'warning':
+        return Icons.warning_amber;
+      case 'info':
+        return Icons.info_outline;
+      case 'success':
+        return Icons.check_circle_outline;
+      case 'error':
+        return Icons.error_outline;
+      case 'shipping':
+        return Icons.local_shipping;
+      default:
+        return Icons.notifications;
+    }
+  }
+
+  Color _getNotificationColor(String type) {
+    switch (type) {
+      case 'warning':
+        return const Color(0xFFF59E0B);
+      case 'info':
+        return const Color(0xFF3B82F6);
+      case 'success':
+        return const Color(0xFF10B981);
+      case 'error':
+        return const Color(0xFFEF4444);
+      case 'shipping':
+        return const Color(0xFF8B5CF6);
+      default:
+        return const Color(0xFF3B82F6);
+    }
+  }
+
+  // Helper method to get full name from user data
+  String _getFullName() {
+    String firstName = _userData['first_name'] ?? '';
+    String lastName = _userData['last_name'] ?? '';
+    
+    if (firstName.isNotEmpty && lastName.isNotEmpty) {
+      return '$firstName $lastName';
+    } else if (firstName.isNotEmpty) {
+      return firstName;
+    } else if (lastName.isNotEmpty) {
+      return lastName;
+    } else {
+      return 'Driver';
+    }
+  }
+
+  // Helper method to get driver ID from user data
+  String _getDriverId() {
+    return _userData['driverId'] ?? _userData['license_number'] ?? 'N/A';
+  }
+
+  // Helper method to display avatar image
+  Widget _getAvatarWidget() {
+    String? avatarBase64 = _userData['avatar'];
+    
+    if (avatarBase64 != null && avatarBase64.isNotEmpty) {
+      // Check if it's a data URL format
+      if (avatarBase64.contains('base64,')) {
+        avatarBase64 = avatarBase64.split('base64,').last;
+      }
+      
+      try {
+        return CircleAvatar(
+          radius: 20,
+          backgroundImage: MemoryImage(base64Decode(avatarBase64)),
+        );
+      } catch (e) {
+        print('Error decoding avatar image: $e');
+        return _buildDefaultAvatar();
+      }
+    } else {
+      return _buildDefaultAvatar();
+    }
+  }
+
+  Widget _buildDefaultAvatar() {
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: Colors.white.withOpacity(0.2),
+      child: const Icon(
+        Icons.person,
+        color: Colors.white,
+        size: 20,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -357,21 +517,13 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: Colors.white.withOpacity(0.2),
-                            child: const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
+                          _getAvatarWidget(),
                           const SizedBox(width: 12),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _userData['fullName'] ?? 'Loading...',
+                                _getFullName(),
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -379,9 +531,7 @@ class _HomePageState extends State<HomePage> {
                                 ),
                               ),
                               Text(
-                                _userData['driverId'] != null 
-                                  ? "Driver No. ${_userData['driverId']}"
-                                  : "Driver",
+                                "Driver No. ${_getDriverId()}",
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: Colors.white70,
@@ -724,28 +874,71 @@ class _HomePageState extends State<HomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    "Notifications",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF1E293B),
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "Notifications",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1E293B),
+                        ),
+                      ),
+                      if (_notifications.isNotEmpty)
+                        TextButton(
+                          onPressed: () {
+                            if (_currentUser != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => NotificationsPage(userId: _currentUser!.uid),
+                                ),
+                              ).then((_) {
+                                _loadNotifications();
+                              });
+                            }
+                          },
+                          child: const Text(
+                            "View All",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF3B82F6),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 16),
-                  _buildNotificationItem(
-                    Icons.warning_amber,
-                    const Color(0xFFF59E0B),
-                    "Port congestion detected at Berth 5. Expect delays.",
-                    "2 minutes ago",
-                  ),
-                  const SizedBox(height: 12),
-                  _buildNotificationItem(
-                    Icons.info_outline,
-                    const Color(0xFF3B82F6),
-                    "System updates scheduled for tonight at 2:00 AM",
-                    "1 hour ago",
-                  ),
+                  
+                  if (_notifications.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Text(
+                        "No notifications yet",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                        ),
+                      ),
+                    )
+                  else
+                    ..._notifications.take(2).map((notification) {
+                      return Column(
+                        children: [
+                          _buildNotificationItem(
+                            _getNotificationIcon(notification['type'] ?? 'info'),
+                            _getNotificationColor(notification['type'] ?? 'info'),
+                            notification['message'] ?? 'No message',
+                            _formatTimeAgo(notification['timestamp'] ?? Timestamp.now()),
+                            isRead: notification['read'] ?? false,
+                          ),
+                          if (_notifications.indexOf(notification) < _notifications.length - 1 && 
+                              _notifications.indexOf(notification) < 1)
+                            const SizedBox(height: 12),
+                        ],
+                      );
+                    }).toList(),
                 ],
               ),
             ),
@@ -876,7 +1069,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildNotificationItem(IconData icon, Color color, String message, String time) {
+  Widget _buildNotificationItem(IconData icon, Color color, String message, String time, {bool isRead = false}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -899,10 +1092,10 @@ class _HomePageState extends State<HomePage> {
             children: [
               Text(
                 message,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF1E293B),
+                  fontWeight: isRead ? FontWeight.w500 : FontWeight.w700,
+                  color: const Color(0xFF1E293B),
                 ),
               ),
               const SizedBox(height: 4),
@@ -916,6 +1109,15 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
         ),
+        if (!isRead)
+          Container(
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Color(0xFFEF4444),
+              shape: BoxShape.circle,
+            ),
+          ),
       ],
     );
   }
@@ -986,7 +1188,7 @@ class _HomePageState extends State<HomePage> {
             label: 'Settings',
           ),
         ],
-      ),
+      )
     );
   }
 }

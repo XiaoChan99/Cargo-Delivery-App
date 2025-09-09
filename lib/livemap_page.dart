@@ -93,7 +93,7 @@ class _LiveMapPageState extends State<LiveMapPage> {
       User? user = _auth.currentUser;
       if (user != null) {
         DocumentSnapshot userDoc = await _firestore
-            .collection('users')
+            .collection('Couriers')
             .doc(user.uid)
             .get();
             
@@ -140,7 +140,7 @@ class _LiveMapPageState extends State<LiveMapPage> {
     User? user = _auth.currentUser;
     if (user != null) {
       _firestore
-          .collection('users')
+          .collection('Couriers')
           .doc(user.uid)
           .snapshots()
           .listen((DocumentSnapshot snapshot) {

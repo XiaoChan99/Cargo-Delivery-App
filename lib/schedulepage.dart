@@ -7,6 +7,9 @@ import 'container_details_page.dart';
 import 'status_update_page.dart';
 import 'livemap_page.dart';
 import 'settings_page.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+
 
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
@@ -88,6 +91,15 @@ class _SchedulePageState extends State<SchedulePage> {
       );
     }
 
+    // Get driver information
+    final firstName = _driverData?['first_name'] ?? 'First Name';
+    final lastName = _driverData?['last_name'] ?? 'Last Name';
+    final licenseNumber = _driverData?['license_number'] ?? 'N/A';
+    final fullName = '$firstName $lastName';
+    
+    // Check if there's a license image for avatar
+    final hasLicenseImage = _driverData?['license_image'] != null;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SingleChildScrollView(
@@ -118,21 +130,29 @@ class _SchedulePageState extends State<SchedulePage> {
                     children: [
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: Colors.white.withOpacity(0.2),
-                            child: const Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
+                          // Avatar with license image or default icon
+                          hasLicenseImage
+                              ? CircleAvatar(
+                                  radius: 20,
+                                  backgroundImage: MemoryImage(
+                                    _decodeBase64Image(_driverData!['license_image']),
+                                  ),
+                                )
+                              : CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: Colors.white.withOpacity(0.2),
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
                           const SizedBox(width: 12),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _driverData?['fullName'] ?? 'Driver Name',
+                                fullName,
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -140,7 +160,7 @@ class _SchedulePageState extends State<SchedulePage> {
                                 ),
                               ),
                               Text(
-                                "Driver No. ${_driverData?['driverId'] ?? 'N/A'}",
+                                "License: $licenseNumber",
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: Colors.white70,
@@ -346,6 +366,16 @@ class _SchedulePageState extends State<SchedulePage> {
       ),
       bottomNavigationBar: _buildBottomNavigation(context, 1),
     );
+  }
+
+  // Helper function to decode base64 image
+  Uint8List _decodeBase64Image(String base64String) {
+    // Remove the data URL prefix if present
+    if (base64String.contains(',')) {
+      base64String = base64String.split(',').last;
+    }
+    
+    return base64Decode(base64String);
   }
 
   Widget _buildLoadingSchedule() {
@@ -639,11 +669,11 @@ class _SchedulePageState extends State<SchedulePage> {
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
+            ),
+          ],
+        ),
+      );
+    }
 
   Widget _buildBottomNavigation(BuildContext context, int currentIndex) {
     return Container(
