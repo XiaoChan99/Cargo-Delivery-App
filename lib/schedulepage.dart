@@ -10,7 +10,6 @@ import 'settings_page.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
-
 class SchedulePage extends StatefulWidget {
   const SchedulePage({super.key});
 
@@ -21,33 +20,82 @@ class SchedulePage extends StatefulWidget {
 class _SchedulePageState extends State<SchedulePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  Map<String, dynamic>? _driverData;
+  Map<String, dynamic>? _userData;
+  Uint8List? _cachedAvatarImage;
+  String _userRole = '';
   bool _isLoading = true;
+
+  // Precompute today's date range for Firestore query
+  late DateTime _startOfDay;
+  late DateTime _endOfDay;
 
   @override
   void initState() {
     super.initState();
-    _loadDriverData();
+    _initDateRange();
+    _loadUserData();
   }
 
-  Future<void> _loadDriverData() async {
+  void _initDateRange() {
+    final now = DateTime.now();
+    _startOfDay = DateTime(now.year, now.month, now.day);
+    _endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
+  }
+
+  Future<void> _loadUserData() async {
     try {
       final user = _auth.currentUser;
       if (user != null) {
-        final driverDoc = await _firestore.collection('users').doc(user.uid).get();
-        if (driverDoc.exists) {
-          setState(() {
-            _driverData = driverDoc.data() as Map<String, dynamic>;
-            _isLoading = false;
-          });
+        // First check if user is a shipper
+        final shipperDoc = await _firestore.collection('Shippers').doc(user.uid).get();
+        
+        if (shipperDoc.exists) {
+          final data = shipperDoc.data() as Map<String, dynamic>;
+          await _processUserData(data, 'shipper');
+          return;
         }
+        
+        // If not a shipper, check if user is a courier
+        final courierDoc = await _firestore.collection('Couriers').doc(user.uid).get();
+        
+        if (courierDoc.exists) {
+          final data = courierDoc.data() as Map<String, dynamic>;
+          await _processUserData(data, 'courier');
+          return;
+        }
+        
+        // If user not found in either collection
+        print('User not found in Shippers or Couriers collection');
       }
     } catch (e) {
-      print('Error loading driver data: $e');
+      print('Error loading user data: $e');
+    } finally {
       setState(() {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _processUserData(Map<String, dynamic> data, String role) async {
+    Uint8List? decodedImage;
+    
+    // Check if avatar exists and is a non-empty string
+    if (data['avatar'] != null && data['avatar'].toString().isNotEmpty) {
+      try {
+        decodedImage = await _decodeImage(data['avatar']);
+        print('Avatar image decoded successfully');
+      } catch (e) {
+        print('Failed to decode avatar image: $e');
+      }
+    } else {
+      print('No avatar data found or avatar is empty');
+    }
+
+    setState(() {
+      _userData = data;
+      _cachedAvatarImage = decodedImage;
+      _userRole = role;
+    });
   }
 
   Color _getStatusColor(String status) {
@@ -76,328 +124,358 @@ class _SchedulePageState extends State<SchedulePage> {
 
   String _formatDate(Timestamp timestamp) {
     final date = timestamp.toDate();
-    final months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    
+    final months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    final weekdays = [
+      'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'
+    ];
     return '${weekdays[date.weekday - 1]} ${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  Future<Uint8List> _decodeImage(String imageData) async {
+    try {
+      // Handle different image data formats
+      if (imageData.startsWith('data:image')) {
+        // Data URI format: data:image/png;base64,...
+        final commaIndex = imageData.indexOf(',');
+        if (commaIndex != -1) {
+          final base64Data = imageData.substring(commaIndex + 1);
+          return base64Decode(base64Data);
+        }
+      }
+      
+      // Assume it's plain base64
+      return base64Decode(imageData);
+    } catch (e) {
+      print('Error decoding image: $e');
+      rethrow;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF8FAFC),
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    // Get driver information
-    final firstName = _driverData?['first_name'] ?? 'First Name';
-    final lastName = _driverData?['last_name'] ?? 'Last Name';
-    final licenseNumber = _driverData?['license_number'] ?? 'N/A';
-    final fullName = '$firstName $lastName';
-    
-    // Check if there's a license image for avatar
-    final hasLicenseImage = _driverData?['license_image'] != null;
+    // Use placeholders while loading
+    final firstName = _userData?['first_name'] ?? 'First Name';
+    final lastName = _userData?['last_name'] ?? 'Last Name';
+    final fullName = _userData != null ? '$firstName $lastName' : 'Loading User...';
+    final hasAvatarImage = _cachedAvatarImage != null && _cachedAvatarImage!.isNotEmpty;
+    final role = _userRole.isNotEmpty ? _userRole : 'Loading role...';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Header with driver info
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(0xFF1E40AF),
-                    Color(0xFF3B82F6),
-                  ],
-                ),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(16),
-                  bottomRight: Radius.circular(16),
-                ),
-              ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          // Avatar with license image or default icon
-                          hasLicenseImage
-                              ? CircleAvatar(
-                                  radius: 20,
-                                  backgroundImage: MemoryImage(
-                                    _decodeBase64Image(_driverData!['license_image']),
-                                  ),
-                                )
-                              : CircleAvatar(
-                                  radius: 20,
-                                  backgroundColor: Colors.white.withOpacity(0.2),
-                                  child: const Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
-                                ),
-                          const SizedBox(width: 12),
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                fullName,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              Text(
-                                "License: $licenseNumber",
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white70,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
+                  // Header with user info
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF1E40AF), Color(0xFF3B82F6)],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    "Today's Schedule",
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        bottomLeft: Radius.circular(16),
+                        bottomRight: Radius.circular(16),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Today's Schedule Section
-            StreamBuilder<QuerySnapshot>(
-              stream: _firestore
-                  .collection('schedules')
-                  .where('driverId', isEqualTo: _auth.currentUser?.uid)
-                  .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day)))
-                  .where('date', isLessThanOrEqualTo: Timestamp.fromDate(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day, 23, 59, 59)))
-                  .orderBy('date')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return _buildLoadingSchedule();
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return _buildNoSchedule();
-                }
-
-                final schedules = snapshot.data!.docs;
-                final firstSchedule = schedules.first.data() as Map<String, dynamic>;
-                final scheduleDate = firstSchedule['date'] as Timestamp;
-
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Colors.white, Color(0xFFFAFBFF)],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _formatDate(scheduleDate),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      
-                      ...schedules.map((doc) {
-                        final schedule = doc.data() as Map<String, dynamic>;
-                        return Column(
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            _buildScheduleEntry(
-                              context,
-                              _formatTime(schedule['date'] as Timestamp),
-                              schedule['containerNo'] ?? 'N/A',
-                              schedule['pickupLocation'] ?? 'N/A',
-                              schedule['destination'] ?? 'N/A',
-                              schedule['status'] ?? 'pending',
-                              _getStatusColor(schedule['status'] ?? 'pending'),
-                              doc.id,
+                            Row(
+                              children: [
+                                // Avatar with better error handling
+                                hasAvatarImage
+                                    ? CircleAvatar(
+                                        radius: 20,
+                                        backgroundImage: MemoryImage(_cachedAvatarImage!),
+                                        backgroundColor: Colors.transparent,
+                                      )
+                                    : CircleAvatar(
+                                        radius: 20,
+                                        backgroundColor: Colors.white.withOpacity(0.2),
+                                        child: const Icon(Icons.person, color: Colors.white, size: 20),
+                                      ),
+                                const SizedBox(width: 12),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      fullName,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                                    ),
+                                    Text(
+                                      "Role: ${role[0].toUpperCase()}${role.substring(1)}", // Capitalize first letter
+                                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 16),
                           ],
-                        );
-                      }).toList(),
-                    ],
-                  ),
-                );
-              },
-            ),
-            
-            const SizedBox(height: 16),
-            
-            // Delivery History Section
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.white, Color(0xFFFAFBFF)],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Delivery History",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1E293B),
                         ),
-                      ),
-                      TextButton(
-                        onPressed: () {},
-                        child: const Text(
-                          "View All",
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF3B82F6),
-                          ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "Today's Schedule",
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+
                   const SizedBox(height: 16),
-                  
+
+                  // Today's Schedule Section
                   StreamBuilder<QuerySnapshot>(
                     stream: _firestore
-                        .collection('delivery_history')
+                        .collection('schedules')
                         .where('driverId', isEqualTo: _auth.currentUser?.uid)
-                        .orderBy('date', descending: true)
-                        .limit(3)
+                        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(_startOfDay))
+                        .where('date', isLessThanOrEqualTo: Timestamp.fromDate(_endOfDay))
+                        .orderBy('date')
                         .snapshots(),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
+                        return _buildLoadingScheduleCards(2); // Optimistic UI
                       }
 
                       if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return const Text(
-                          'No delivery history',
-                          style: TextStyle(
-                            color: Color(0xFF64748B),
-                          ),
-                        );
+                        return _buildNoSchedule();
                       }
 
-                      final history = snapshot.data!.docs;
+                      final schedules = snapshot.data!.docs;
+                      final firstSchedule = schedules.first.data() as Map<String, dynamic>;
+                      final scheduleDate = firstSchedule['date'] as Timestamp;
 
-                      return Column(
-                        children: history.map((doc) {
-                          final delivery = doc.data() as Map<String, dynamic>;
-                          return Column(
-                            children: [
-                              _buildHistoryEntry(
-                                _formatDate(delivery['date'] as Timestamp),
-                                delivery['containerNo'] ?? 'N/A',
-                                '${delivery['pickupLocation']} → ${delivery['destination']}',
-                                delivery['status'] ?? 'delivered',
-                                _getStatusColor(delivery['status'] ?? 'delivered'),
-                              ),
-                              if (history.last != doc) const SizedBox(height: 12),
-                            ],
-                          );
-                        }).toList(),
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Colors.white, Color(0xFFFAFBFF)]),
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4)),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _formatDate(scheduleDate),
+                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+                            ),
+                            const SizedBox(height: 20),
+                            ...schedules.map((doc) {
+                              final schedule = doc.data() as Map<String, dynamic>;
+                              return Column(
+                                children: [
+                                  _buildScheduleEntry(
+                                    context,
+                                    _formatTime(schedule['date'] as Timestamp),
+                                    schedule['containerNo'] ?? 'N/A',
+                                    schedule['pickupLocation'] ?? 'N/A',
+                                    schedule['destination'] ?? 'N/A',
+                                    schedule['status'] ?? 'pending',
+                                    _getStatusColor(schedule['status'] ?? 'pending'),
+                                    doc.id,
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                              );
+                            }).toList(),
+                          ],
+                        ),
                       );
                     },
                   ),
+
+                  const SizedBox(height: 16),
+
+                  // Delivery History Section
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Colors.white, Color(0xFFFAFBFF)]),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4)),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              "Delivery History",
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+                            ),
+                            TextButton(
+                              onPressed: () {},
+                              child: const Text(
+                                "View All",
+                                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF3B82F6)),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        StreamBuilder<QuerySnapshot>(
+                          stream: _firestore
+                              .collection('delivery_history')
+                              .where('driverId', isEqualTo: _auth.currentUser?.uid)
+                              .orderBy('date', descending: true)
+                              .limit(3)
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.waiting) {
+                              return _buildHistorySkeletons(2);
+                            }
+
+                            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                              return const Text(
+                                'No delivery history',
+                                style: TextStyle(color: Color(0xFF64748B)),
+                              );
+                            }
+
+                            final history = snapshot.data!.docs;
+
+                            return Column(
+                              children: history.map((doc) {
+                                final delivery = doc.data() as Map<String, dynamic>;
+                                return Column(
+                                  children: [
+                                    _buildHistoryEntry(
+                                      _formatDate(delivery['date'] as Timestamp),
+                                      delivery['containerNo'] ?? 'N/A',
+                                      '${delivery['pickupLocation']} → ${delivery['destination']}',
+                                      delivery['status'] ?? 'delivered',
+                                      _getStatusColor(delivery['status'] ?? 'delivered'),
+                                    ),
+                                    if (history.last != doc) const SizedBox(height: 12),
+                                  ],
+                                );
+                              }).toList(),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 100),
                 ],
               ),
             ),
-            
-            const SizedBox(height: 100),
-          ],
-        ),
-      ),
       bottomNavigationBar: _buildBottomNavigation(context, 1),
     );
   }
 
-  // Helper function to decode base64 image
-  Uint8List _decodeBase64Image(String base64String) {
-    // Remove the data URL prefix if present
-    if (base64String.contains(',')) {
-      base64String = base64String.split(',').last;
-    }
-    
-    return base64Decode(base64String);
-  }
+  // SKELETON UI HELPERS
 
-  Widget _buildLoadingSchedule() {
+  Widget _buildLoadingScheduleCards(int count) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.white, Color(0xFFFAFBFF)],
-        ),
+        gradient: const LinearGradient(colors: [Colors.white, Color(0xFFFAFBFF)]),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
+          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        children: List.generate(count, (index) => _buildSkeletonScheduleCard()),
+      ),
+    );
+  }
+
+  Widget _buildSkeletonScheduleCard() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(height: 16, width: 60, color: Colors.grey[300]),
+              Container(height: 16, width: 80, color: Colors.grey[300]),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(height: 16, width: 100, color: Colors.grey[300]),
+          const SizedBox(height: 4),
+          Container(height: 12, width: 120, color: Colors.grey[300]),
+          Container(height: 12, width: 100, color: Colors.grey[300]),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Container(height: 36, color: Colors.grey[300]),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(height: 36, color: Colors.grey[300]),
+              ),
+            ],
           ),
         ],
       ),
-      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  Widget _buildHistorySkeletons(int count) {
+    return Column(
+      children: List.generate(count, (index) {
+        return Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(height: 12, width: 80, color: Colors.grey[300]),
+                        const SizedBox(height: 4),
+                        Container(height: 14, width: 100, color: Colors.grey[300]),
+                        const SizedBox(height: 2),
+                        Container(height: 12, width: 140, color: Colors.grey[300]),
+                      ],
+                    ),
+                  ),
+                  Container(height: 16, width: 70, color: Colors.grey[300]),
+                ],
+              ),
+            ),
+            if (index < count - 1) const SizedBox(height: 12),
+          ],
+        );
+      }),
     );
   }
 
@@ -406,26 +484,15 @@ class _SchedulePageState extends State<SchedulePage> {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.white, Color(0xFFFAFBFF)],
-        ),
+        gradient: const LinearGradient(colors: [Colors.white, Color(0xFFFAFBFF)]),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 20, offset: const Offset(0, 4)),
         ],
       ),
       child: const Text(
         'No schedules for today',
-        style: TextStyle(
-          fontSize: 16,
-          color: Color(0xFF64748B),
-        ),
+        style: TextStyle(fontSize: 16, color: Color(0xFF64748B)),
         textAlign: TextAlign.center,
       ),
     );
@@ -447,30 +514,15 @@ class _SchedulePageState extends State<SchedulePage> {
             children: [
               Text(
                 time,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E293B),
-                ),
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
               ),
               Row(
                 children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
                   const SizedBox(width: 6),
                   Text(
                     status,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: statusColor,
-                    ),
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: statusColor),
                   ),
                 ],
               ),
@@ -479,26 +531,16 @@ class _SchedulePageState extends State<SchedulePage> {
           const SizedBox(height: 8),
           Text(
             container,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1E293B),
-            ),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
           ),
           const SizedBox(height: 4),
           Text(
             pickup,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF64748B),
-            ),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
           ),
           Text(
             destination,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF64748B),
-            ),
+            style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 12),
           Row(
@@ -508,14 +550,11 @@ class _SchedulePageState extends State<SchedulePage> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF3B82F6),
                     side: const BorderSide(color: Color(0xFF3B82F6)),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     padding: const EdgeInsets.symmetric(vertical: 8),
                   ),
                   onPressed: () {
                     Widget destinationPage;
-                    
                     if (status.toLowerCase() == "in progress") {
                       destinationPage = LiveLocationPage(
                         containerNo: container,
@@ -549,19 +588,9 @@ class _SchedulePageState extends State<SchedulePage> {
                         status: status,
                       );
                     }
-                    
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => destinationPage),
-                    );
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => destinationPage));
                   },
-                  child: const Text(
-                    "View",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: const Text("View", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 ),
               ),
               if (status.toLowerCase() == "delayed") ...[
@@ -572,9 +601,7 @@ class _SchedulePageState extends State<SchedulePage> {
                       backgroundColor: const Color(0xFF3B82F6),
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       padding: const EdgeInsets.symmetric(vertical: 8),
                     ),
                     onPressed: () {
@@ -591,13 +618,7 @@ class _SchedulePageState extends State<SchedulePage> {
                         ),
                       );
                     },
-                    child: const Text(
-                      "Status Update",
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    child: const Text("Status Update", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                   ),
                 ),
               ],
@@ -622,69 +643,32 @@ class _SchedulePageState extends State<SchedulePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  date,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
+                Text(date, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                 const SizedBox(height: 4),
-                Text(
-                  container,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B),
-                  ),
-                ),
+                Text(container, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
                 const SizedBox(height: 2),
-                Text(
-                  route,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF64748B),
-                  ),
-                ),
+                Text(route, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
               ],
             ),
           ),
           Row(
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                ),
-              ),
+              Container(width: 8, height: 8, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
               const SizedBox(width: 6),
-              Text(
-                status,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: statusColor,
-                ),
-              ),
+              Text(status, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: statusColor)),
             ],
-            ),
-          ],
-        ),
-      );
-    }
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildBottomNavigation(BuildContext context, int currentIndex) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, -4),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -4)),
         ],
       ),
       child: BottomNavigationBar(
@@ -698,48 +682,23 @@ class _SchedulePageState extends State<SchedulePage> {
         onTap: (index) {
           switch (index) {
             case 0:
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const HomePage()),
-              );
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const HomePage()));
               break;
             case 1:
               break;
             case 2:
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const LiveMapPage()),
-              );
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LiveMapPage()));
               break;
             case 3:
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsPage()),
-              );
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const SettingsPage()));
               break;
           }
         },
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.schedule_outlined),
-            activeIcon: Icon(Icons.schedule),
-            label: 'Schedule',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.map_outlined),
-            activeIcon: Icon(Icons.map),
-            label: 'Live Map',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.schedule_outlined), activeIcon: Icon(Icons.schedule), label: 'Schedule'),
+          BottomNavigationBarItem(icon: Icon(Icons.map_outlined), activeIcon: Icon(Icons.map), label: 'Live Map'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), activeIcon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );

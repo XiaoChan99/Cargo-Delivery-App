@@ -19,6 +19,7 @@ class _HomePageState extends State<HomePage> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   User? _currentUser;
   Map<String, dynamic> _userData = {};
+  String _userRole = ''; // Added to track user role
   int _notificationCount = 0;
   List<Map<String, dynamic>> _upcomingTasks = [];
   List<Map<String, dynamic>> _notifications = [];
@@ -94,20 +95,21 @@ class _HomePageState extends State<HomePage> {
   Future<void> _loadUserData() async {
     if (_currentUser != null) {
       try {
-        // First try to get user data from Drivers collection
-        DocumentSnapshot driverDoc = await _firestore
-            .collection('Drivers')
+        // First try to get user data from Shippers collection
+        DocumentSnapshot shipperDoc = await _firestore
+            .collection('Shippers')
             .doc(_currentUser!.uid)
             .get();
         
-        if (driverDoc.exists) {
+        if (shipperDoc.exists) {
           setState(() {
-            _userData = driverDoc.data() as Map<String, dynamic>;
+            _userData = shipperDoc.data() as Map<String, dynamic>;
+            _userRole = 'Shipper';
           });
           return;
         }
         
-        // If not found in Drivers, try Couriers collection
+        // If not found in Shippers, try Couriers collection
         DocumentSnapshot courierDoc = await _firestore
             .collection('Couriers')
             .doc(_currentUser!.uid)
@@ -116,15 +118,22 @@ class _HomePageState extends State<HomePage> {
         if (courierDoc.exists) {
           setState(() {
             _userData = courierDoc.data() as Map<String, dynamic>;
+            _userRole = 'courier';
           });
           return;
         }
         
         // If user not found in either collection
         print('User data not found in Firestore');
+        setState(() {
+          _errorMessage = "User profile not found";
+        });
         
       } catch (e) {
         print('Error loading user data: $e');
+        setState(() {
+          _errorMessage = "Error loading user profile";
+        });
       }
     }
   }
@@ -414,9 +423,24 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // Helper method to get driver ID from user data
+  // Helper method to get driver ID from user data based on role
   String _getDriverId() {
-    return _userData['driverId'] ?? _userData['license_number'] ?? 'N/A';
+    if (_userRole == 'courier') {
+      return _userData['driverId'] ?? _userData['license_number'] ?? 'N/A';
+    } else if (_userRole == 'Shipper') {
+      return _userData['_userRole'] ?? _userData['role'] ?? 'N/A';
+    }
+    return 'N/A';
+  }
+
+  // Helper method to display role-specific text
+  String _getRoleText() {
+    if (_userRole == 'courier') {
+      return "Driver No.";
+    } else if (_userRole == 'Shipper') {
+      return "Role:";
+    }
+    return "User ID:";
   }
 
   // Helper method to display avatar image
@@ -531,7 +555,7 @@ class _HomePageState extends State<HomePage> {
                                 ),
                               ),
                               Text(
-                                "Driver No. ${_getDriverId()}",
+                                "${_getRoleText()} ${_getDriverId()}",
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: Colors.white70,

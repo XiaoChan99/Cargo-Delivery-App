@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cargo/header_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -39,7 +38,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
   double _uploadProgress = 0.0;
   String? _initializationError;
   int _currentStep = 0;
-  String _selectedRole = 'shipper'; // Default role
+  String? _selectedRole; // No default role - user must choose
 
   @override
   void initState() {
@@ -144,6 +143,14 @@ class _RegistrationPageState extends State<RegistrationPage> {
       return;
     }
     
+    // Validate role selection
+    if (_selectedRole == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a role (Shipper or Courier)')),
+      );
+      return;
+    }
+    
     try {
       setState(() {
         _isLoading = true;
@@ -183,15 +190,15 @@ class _RegistrationPageState extends State<RegistrationPage> {
         'is_active': true,
       };
       
-      // Add driver-specific fields if role is driver
-      if (_selectedRole == 'driver') {
+      // Add courier-specific fields if role is courier
+      if (_selectedRole == 'courier') {
         userData['license_number'] = _licenseNumberController.text.trim();
         userData['license_image'] = _licenseFileBase64 != null ? 'data:image/jpeg;base64,$_licenseFileBase64' : null;
-        userData['driver_status'] = 'pending_verification'; // pending_verification, verified, rejected
+        userData['courier_status'] = 'pending_verification'; // pending_verification, verified, rejected
       }
 
       // Determine the collection based on role
-      String collectionName = _selectedRole == 'driver' ? 'Drivers' : 'Shippers';
+      String collectionName = _selectedRole == 'courier' ? 'Couriers' : 'Shippers';
       
       await FirebaseFirestore.instance
           .collection(collectionName)
@@ -268,7 +275,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "Select Your Role",
+          "Select Your Role*",
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
@@ -282,18 +289,18 @@ class _RegistrationPageState extends State<RegistrationPage> {
               child: GestureDetector(
                 onTap: () {
                   setState(() {
-                    _selectedRole = 'shipper';
+                    _selectedRole = 'Shipper';
                   });
                 },
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: _selectedRole == 'shipper' 
+                    color: _selectedRole == 'Shipper' 
                         ? const Color(0xFF3B82F6).withOpacity(0.1)
                         : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _selectedRole == 'shipper' 
+                      color: _selectedRole == 'Shipper' 
                           ? const Color(0xFF3B82F6)
                           : const Color(0xFFE2E8F0),
                       width: 2,
@@ -303,7 +310,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     children: [
                       Icon(
                         Icons.inventory_2_outlined,
-                        color: _selectedRole == 'shipper' 
+                        color: _selectedRole == 'Shipper' 
                             ? const Color(0xFF3B82F6)
                             : const Color(0xFF64748B),
                       ),
@@ -324,18 +331,18 @@ class _RegistrationPageState extends State<RegistrationPage> {
               child: GestureDetector(
                 onTap: () {
                   setState(() {
-                    _selectedRole = 'driver';
+                    _selectedRole = 'courier';
                   });
                 },
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: _selectedRole == 'driver' 
+                    color: _selectedRole == 'courier' 
                         ? const Color(0xFF10B981).withOpacity(0.1)
                         : Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _selectedRole == 'driver' 
+                      color: _selectedRole == 'courier' 
                           ? const Color(0xFF10B981)
                           : const Color(0xFFE2E8F0),
                       width: 2,
@@ -345,13 +352,13 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     children: [
                       Icon(
                         Icons.directions_car_outlined,
-                        color: _selectedRole == 'driver' 
+                        color: _selectedRole == 'courier' 
                             ? const Color(0xFF10B981)
                             : const Color(0xFF64748B),
                       ),
                       const SizedBox(width: 12),
                       const Text(
-                        "Driver",
+                        "Courier",
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                         ),
@@ -363,12 +370,22 @@ class _RegistrationPageState extends State<RegistrationPage> {
             ),
           ],
         ),
+        if (_selectedRole == null) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Please select a role',
+            style: TextStyle(
+              color: Colors.red,
+              fontSize: 12,
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  // Step 1: Basic information
-  Widget _buildStep1() {
+  // Step 0: Role selection
+  Widget _buildStep0() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -414,7 +431,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
               ),
               SizedBox(width: 8),
               Text(
-                "Personal Details",
+                "Role Selection",
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -427,7 +444,82 @@ class _RegistrationPageState extends State<RegistrationPage> {
         const SizedBox(height: 20),
         
         _buildRoleSelector(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 32),
+        
+        Text(
+          _selectedRole == 'Shipper' 
+            ? "As a Shipper, you can create and manage delivery requests for your packages."
+            : _selectedRole == 'courier'
+              ? "As a Courier, you can accept and fulfill delivery requests to earn money."
+              : "Please select whether you want to ship packages or deliver them.",
+          style: const TextStyle(
+            fontSize: 14,
+            color: Color(0xFF64748B),
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  // Step 1: Basic information
+  Widget _buildStep1() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Center(
+          child: Column(
+            children: [
+              Text(
+                "Personal Information",
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF1E293B),
+                  letterSpacing: -0.5,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                "Tell us about yourself",
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFF64748B),
+                  fontWeight: FontWeight.w400,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 32),
+        
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF3B82F6).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: const [
+              Icon(
+                Icons.person_outline,
+                size: 20,
+                color: Color(0xFF3B82F6),
+              ),
+              SizedBox(width: 8),
+              Text(
+                "Personal Details",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF3B82F6),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         
         _buildTextField(
           controller: _firstNameController,
@@ -639,9 +731,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-  // Step 2: Driver-specific information
+  // Step 2: Courier-specific information
   Widget _buildStep2() {
-    if (_selectedRole != 'driver') {
+    if (_selectedRole != 'courier') {
       return _buildConfirmationStep();
     }
     
@@ -652,7 +744,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
           child: Column(
             children: [
               Text(
-                "Driver Information",
+                "Courier Information",
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
@@ -662,7 +754,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
               ),
               SizedBox(height: 8),
               Text(
-                "Complete your driver profile",
+                "Complete your courier profile",
                 style: TextStyle(
                   fontSize: 16,
                   color: Color(0xFF64748B),
@@ -690,7 +782,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
               ),
               SizedBox(width: 8),
               Text(
-                "Driver Details",
+                "Courier Details",
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -709,7 +801,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
           icon: Icons.card_membership_outlined,
           iconColor: const Color(0xFF10B981),
           validator: (value) {
-            if (_selectedRole == 'driver' && (value == null || value.isEmpty)) {
+            if (_selectedRole == 'courier' && (value == null || value.isEmpty)) {
               return 'Please enter your license number';
             }
             return null;
@@ -823,250 +915,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_initializationError != null) {
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, color: Colors.red, size: 64),
-                const SizedBox(height: 20),
-                const Text(
-                  'Firebase Configuration Error',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  _initializationError!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 16),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Please check your Firebase configuration and try again.',
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-    
-    if (!_firebaseInitialized) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 20),
-              Text('Checking Firebase initialization...'),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const AppHeader(),
-            Container(
-              margin: const EdgeInsets.all(16),
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.white, Color(0xFFFAFBFF)],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 20,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Step indicator
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        _buildStepIndicator(1, "Details", _currentStep >= 0),
-                        const SizedBox(width: 8),
-                        Container(
-                          height: 2,
-                          width: 40,
-                          color: _currentStep >= 1 
-                              ? const Color(0xFF3B82F6) 
-                              : const Color(0xFFE2E8F0),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildStepIndicator(2, "Role", _currentStep >= 1),
-                        const SizedBox(width: 8),
-                        Container(
-                          height: 2,
-                          width: 40,
-                          color: _currentStep >= 2 
-                              ? const Color(0xFF3B82F6) 
-                              : const Color(0xFFE2E8F0),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildStepIndicator(3, "Finish", _currentStep >= 2),
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    
-                    // Step content
-                    _currentStep == 0 ? _buildStep1() : 
-                    _currentStep == 1 ? _buildStep2() : 
-                    _buildConfirmationStep(),
-                    
-                    const SizedBox(height: 32),
-                    
-                    // Navigation buttons
-                    Row(
-                      children: [
-                        if (_currentStep > 0)
-                          Expanded(
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF64748B),
-                                side: const BorderSide(color: Color(0xFFE2E8F0)),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _currentStep--;
-                                });
-                              },
-                              child: const Text(
-                                "Back",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (_currentStep > 0) const SizedBox(width: 16),
-                        Expanded(
-                          flex: _currentStep == 0 ? 1 : 2,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _currentStep < 2 
-                                  ? const Color(0xFF3B82F6) 
-                                  : const Color(0xFF10B981),
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                            onPressed: _isLoading ? null : () async {
-                              if (_currentStep < 2) {
-                                // Validate current step before proceeding
-                                if (_currentStep == 0 && _formKey.currentState!.validate()) {
-                                  setState(() {
-                                    _currentStep++;
-                                  });
-                                } else if (_currentStep == 1) {
-                                  setState(() {
-                                    _currentStep++;
-                                  });
-                                }
-                              } else {
-                                // Final step - register user
-                                if (_formKey.currentState!.validate()) {
-                                  await _registerUser();
-                                }
-                              }
-                            },
-                            child: _isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
-                                : Text(
-                                    _currentStep < 2 ? "Next" : "Confirm",
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStepIndicator(int stepNumber, String label, bool isActive) {
-    return Column(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: isActive ? const Color(0xFF3B82F6) : Colors.white,
-            border: Border.all(
-              color: isActive ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
-              width: 2,
-            ),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Center(
-            child: Text(
-              stepNumber.toString(),
-              style: TextStyle(
-                color: isActive ? Colors.white : const Color(0xFF64748B),
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: isActive ? const Color(0xFF3B82F6) : const Color(0xFF64748B),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-
+  // Step 3: Confirmation step
   Widget _buildConfirmationStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1074,12 +923,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         const Center(
           child: Column(
             children: [
-              Icon(
-                Icons.check_circle_outline,
-                color: Color(0xFF10B981),
-                size: 64,
-              ),
-              SizedBox(height: 16),
               Text(
                 "Review Your Information",
                 style: TextStyle(
@@ -1091,7 +934,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
               ),
               SizedBox(height: 8),
               Text(
-                "Please confirm your details before submitting",
+                "Please verify your details before submitting",
                 style: TextStyle(
                   fontSize: 16,
                   color: Color(0xFF64748B),
@@ -1105,50 +948,95 @@ class _RegistrationPageState extends State<RegistrationPage> {
         const SizedBox(height: 32),
         
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            color: const Color(0xFF8B5CF6).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Row(
             children: [
-              const Text(
-                "Personal Information",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF1E293B),
-                ),
+              Icon(
+                Icons.check_circle_outline,
+                size: 20,
+                color: Color(0xFF8B5CF6),
               ),
-              const SizedBox(height: 16),
-              _buildConfirmationRow("Role", _selectedRole == 'shipper' ? "Shipper" : "Driver"),
-              _buildConfirmationRow("First Name", _firstNameController.text),
-              _buildConfirmationRow("Last Name", _lastNameController.text),
-              _buildConfirmationRow("Email", _emailController.text),
-              _buildConfirmationRow("Phone", _phoneController.text),
-              _buildConfirmationRow("Address", _addressController.text),
-              if (_selectedRole == 'driver') ...[
-                const SizedBox(height: 16),
-                const Text(
-                  "Driver Information",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF1E293B),
-                  ),
+              SizedBox(width: 8),
+              Text(
+                "Confirmation",
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF8B5CF6),
                 ),
-                const SizedBox(height: 16),
-                _buildConfirmationRow("License Number", _licenseNumberController.text),
-                _buildConfirmationRow("License Photo", _licenseFileName ?? "Not uploaded"),
-              ],
+                ),
             ],
           ),
         ),
+        const SizedBox(height: 20),
+        
+        // Role confirmation
+        _buildConfirmationItem(
+          label: "Role",
+          value: _selectedRole == 'Shipper' ? "Shipper" : "Courier",
+          icon: Icons.person_outline,
+        ),
         const SizedBox(height: 16),
+        
+        // Personal info confirmation
+        _buildConfirmationItem(
+          label: "Name",
+          value: "${_firstNameController.text} ${_lastNameController.text}",
+          icon: Icons.person,
+        ),
+        const SizedBox(height: 16),
+        
+        _buildConfirmationItem(
+          label: "Email",
+          value: _emailController.text,
+          icon: Icons.email,
+        ),
+        const SizedBox(height: 16),
+        
+        _buildConfirmationItem(
+          label: "Phone",
+          value: _phoneController.text,
+          icon: Icons.phone,
+        ),
+        const SizedBox(height: 16),
+        
+        _buildConfirmationItem(
+          label: "Address",
+          value: _addressController.text,
+          icon: Icons.location_on,
+        ),
+        
+        // Courier-specific confirmation
+        if (_selectedRole == 'courier') ...[
+          const SizedBox(height: 16),
+          _buildConfirmationItem(
+            label: "License Number",
+            value: _licenseNumberController.text,
+            icon: Icons.card_membership,
+          ),
+          const SizedBox(height: 16),
+          _buildConfirmationItem(
+            label: "License Photo",
+            value: _licenseFileName ?? "Not uploaded",
+            icon: Icons.photo,
+          ),
+        ],
+        
+        // Avatar confirmation
+        const SizedBox(height: 16),
+        _buildConfirmationItem(
+          label: "Profile Avatar",
+          value: _avatarFileName ?? "Not uploaded",
+          icon: Icons.photo_camera,
+        ),
+        
+        const SizedBox(height: 32),
         const Text(
-          "By clicking Confirm, you agree to our Terms of Service and Privacy Policy.",
+          "By submitting this form, you agree to our Terms of Service and Privacy Policy.",
           style: TextStyle(
             color: Color(0xFF64748B),
             fontSize: 12,
@@ -1159,34 +1047,79 @@ class _RegistrationPageState extends State<RegistrationPage> {
     );
   }
 
-  Widget _buildConfirmationRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+  Widget _buildConfirmationItem({required String label, required String value, required IconData icon}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              "$label:",
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF64748B),
-              ),
-            ),
+          Icon(
+            icon,
+            color: const Color(0xFF64748B),
+            size: 20,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF1E293B),
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value.isNotEmpty ? value : "Not provided",
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStepIndicator(int stepNumber, String label, bool isActive) {
+    return Column(
+      children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFF3B82F6) : const Color(0xFFE2E8F0),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              stepNumber.toString(),
+              style: TextStyle(
+                color: isActive ? Colors.white : const Color(0xFF64748B),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: isActive ? const Color(0xFF3B82F6) : const Color(0xFF64748B),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1196,7 +1129,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
     required String hint,
     required IconData icon,
     required Color iconColor,
-    TextInputType? keyboardType,
+    TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
   }) {
     return Column(
@@ -1214,6 +1147,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
+          validator: validator,
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Container(
@@ -1244,14 +1178,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
               borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            errorMaxLines: 2,
           ),
-          validator: validator ?? (value) {
-            if (value == null || value.isEmpty) {
-              return 'Please enter your ${label.toLowerCase()}';
-            }
-            return null;
-          },
         ),
       ],
     );
@@ -1280,6 +1207,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
         TextFormField(
           controller: controller,
           obscureText: !isVisible,
+          validator: validator,
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Container(
@@ -1297,7 +1225,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
             ),
             suffixIcon: IconButton(
               icon: Icon(
-                isVisible ? Icons.visibility_off : Icons.visibility,
+                isVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
                 color: const Color(0xFF64748B),
               ),
               onPressed: onVisibilityToggle,
@@ -1317,24 +1245,234 @@ class _RegistrationPageState extends State<RegistrationPage> {
               borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 2),
             ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            errorMaxLines: 2,
           ),
-          validator: validator,
         ),
       ],
     );
   }
 
+  List<Step> _buildSteps() {
+    return [
+      Step(
+        title: const Text("Role"),
+        content: _buildStep0(),
+        isActive: _currentStep >= 0,
+        state: _currentStep > 0 ? StepState.complete : StepState.indexed,
+      ),
+      Step(
+        title: const Text("Personal"),
+        content: _buildStep1(),
+        isActive: _currentStep >= 1,
+        state: _currentStep > 1 ? StepState.complete : StepState.indexed,
+      ),
+      if (_selectedRole == 'courier')
+        Step(
+          title: const Text("License"),
+          content: _buildStep2(),
+          isActive: _currentStep >= 2,
+          state: _currentStep > 2 ? StepState.complete : StepState.indexed,
+        ),
+      Step(
+        title: const Text("Confirm"),
+        content: _buildConfirmationStep(),
+        isActive: _currentStep >= (_selectedRole == 'courier' ? 3 : 2),
+        state: _currentStep > (_selectedRole == 'courier' ? 3 : 2) 
+            ? StepState.complete 
+            : StepState.indexed,
+      ),
+    ];
+  }
+
   @override
-  void dispose() {
-    _firstNameController.dispose();
-    _lastNameController.dispose();
-    _emailController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
-    _licenseNumberController.dispose();
-    _phoneController.dispose();
-    _addressController.dispose();
-    super.dispose();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: const Text(
+          "Create Account",
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF64748B)),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: _initializationError != null
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Initialization Error",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E293B),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _initializationError!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _checkFirebaseInitialization,
+                    child: const Text("Retry"),
+                  ),
+                ],
+              ),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    // Step indicator
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildStepIndicator(1, "Role", _currentStep >= 0),
+                        Container(
+                          height: 2,
+                          width: 40,
+                          color: _currentStep >= 1 
+                              ? const Color(0xFF3B82F6) 
+                              : const Color(0xFFE2E8F0),
+                        ),
+                        _buildStepIndicator(2, "Personal", _currentStep >= 1),
+                        if (_selectedRole == 'courier') ...[
+                          Container(
+                            height: 2,
+                            width: 40,
+                            color: _currentStep >= 2 
+                                ? const Color(0xFF3B82F6) 
+                                : const Color(0xFFE2E8F0),
+                          ),
+                          _buildStepIndicator(3, "License", _currentStep >= 2),
+                        ],
+                        Container(
+                          height: 2,
+                          width: 40,
+                          color: _currentStep >= (_selectedRole == 'courier' ? 3 : 2)
+                              ? const Color(0xFF3B82F6) 
+                              : const Color(0xFFE2E8F0),
+                        ),
+                        _buildStepIndicator(
+                          _selectedRole == 'courier' ? 4 : 3, 
+                          "Confirm", 
+                          _currentStep >= (_selectedRole == 'courier' ? 3 : 2)
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Current step content
+                    IndexedStack(
+                      index: _currentStep,
+                      children: [
+                        _buildStep0(),
+                        _buildStep1(),
+                        if (_selectedRole == 'courier') _buildStep2(),
+                        _buildConfirmationStep(),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+
+                    // Navigation buttons
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        if (_currentStep > 0)
+                          OutlinedButton(
+                            onPressed: () {
+                              setState(() {
+                                _currentStep--;
+                              });
+                            },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text("Back"),
+                          )
+                        else
+                          const SizedBox(width: 100),
+
+                        if (_currentStep < (_selectedRole == 'courier' ? 3 : 2))
+                          ElevatedButton(
+                            onPressed: () {
+                              if (_currentStep == 0 && _selectedRole == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please select a role')),
+                                );
+                                return;
+                              }
+                              
+                              if (_currentStep == 1) {
+                                if (!_formKey.currentState!.validate()) {
+                                  return;
+                                }
+                              }
+                              
+                              setState(() {
+                                _currentStep++;
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF3B82F6),
+                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              "Next",
+                              style: TextStyle(color: Colors.white),
+                            ),
+                          )
+                        else
+                          ElevatedButton(
+                            onPressed: _isLoading ? null : _registerUser,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF10B981),
+                              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : const Text(
+                                    "Create Account",
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
   }
 }

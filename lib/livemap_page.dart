@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'homepage.dart';
 import 'schedulepage.dart';
 import 'settings_page.dart';
@@ -16,15 +14,10 @@ class LiveMapPage extends StatefulWidget {
 
 class _LiveMapPageState extends State<LiveMapPage> {
   final MapController _mapController = MapController();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
   
   LatLng _truckLocation = const LatLng(14.5547, 121.0244);
-  String _driverName = "Loading...";
-  String _driverNo = "Loading...";
-  bool _isMapMinimized = false;
-  bool _isLoading = true;
-  String? _errorMessage;
+  String _driverName = "Driver Name";
+  String _driverNo = "DRV-001";
   bool _showCargoDetails = false;
   Map<String, dynamic> _cargoData = {};
   
@@ -39,14 +32,12 @@ class _LiveMapPageState extends State<LiveMapPage> {
   @override
   void initState() {
     super.initState();
-    _fetchDriverData();
-    _setupLocationListener();
     _generateRealisticDeliveryRoute();
     _loadCargoData();
   }
   
   void _loadCargoData() {
-    // Simulate cargo data - in real app, fetch from Firestore
+    // Static cargo data
     setState(() {
       _cargoData = {
         'containerNo': 'CNTR456789',
@@ -87,85 +78,6 @@ class _LiveMapPageState extends State<LiveMapPage> {
       _davaoPort,
     ];
   }
-  
-  void _fetchDriverData() async {
-    try {
-      User? user = _auth.currentUser;
-      if (user != null) {
-        DocumentSnapshot userDoc = await _firestore
-            .collection('Couriers')
-            .doc(user.uid)
-            .get();
-            
-        if (userDoc.exists && userDoc.data() != null) {
-          Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
-          
-          setState(() {
-            _driverName = data['fullName'] ?? "Driver";
-            _driverNo = data['driverId'] ?? "Driver ID";
-            
-            if (data.containsKey('location')) {
-              var locationData = data['location'];
-              if (locationData != null) {
-                double lat = locationData['latitude'] ?? _truckLocation.latitude;
-                double lng = locationData['longitude'] ?? _truckLocation.longitude;
-                _truckLocation = LatLng(lat, lng);
-              }
-            }
-            
-            _isLoading = false;
-          });
-        } else {
-          setState(() {
-            _errorMessage = "User data not found";
-            _isLoading = false;
-          });
-        }
-      } else {
-        setState(() {
-          _errorMessage = "User not authenticated";
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      print("Error fetching driver data: $e");
-      setState(() {
-        _errorMessage = "Error loading data";
-        _isLoading = false;
-      });
-    }
-  }
-  
-  void _setupLocationListener() {
-    User? user = _auth.currentUser;
-    if (user != null) {
-      _firestore
-          .collection('Couriers')
-          .doc(user.uid)
-          .snapshots()
-          .listen((DocumentSnapshot snapshot) {
-        if (snapshot.exists && snapshot.data() != null) {
-          Map<String, dynamic> data = snapshot.data() as Map<String, dynamic>;
-          
-          if (data.containsKey('location')) {
-            var locationData = data['location'];
-            if (locationData != null) {
-              double lat = locationData['latitude'] ?? _truckLocation.latitude;
-              double lng = locationData['longitude'] ?? _truckLocation.longitude;
-              
-              setState(() {
-                _truckLocation = LatLng(lat, lng);
-              });
-              
-              _mapController.move(_truckLocation, _mapController.camera.zoom);
-            }
-          }
-        }
-      }, onError: (error) {
-        print("Error in location listener: $error");
-      });
-    }
-  }
 
   void _showCargoDetailsModal() {
     setState(() {
@@ -181,216 +93,96 @@ class _LiveMapPageState extends State<LiveMapPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
-    if (_errorMessage != null) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _fetchDriverData,
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: Stack(
         children: [
-          Column(
+          // Map - takes the full screen
+          Stack(
             children: [
-              // Header
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF1E40AF),
-                      Color(0xFF3B82F6),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.only(
-                    bottomLeft: Radius.circular(16),
-                    bottomRight: Radius.circular(16),
-                  ),
-                ),
+              LiveMapWidget(
+                truckLocation: _truckLocation,
+                mapController: _mapController,
+                deliveryRoute: _deliveryRoute,
+                ports: [_manilaPort, _cebuPort, _davaoPort, _subicPort, _batangasPort],
+                onTruckTap: _showCargoDetailsModal,
+              ),
+              
+              // Map controls
+              Positioned(
+                bottom: 16,
+                right: 16,
                 child: Column(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: Colors.white.withOpacity(0.2),
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _driverName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                Text(
-                                  "Driver No. $_driverNo",
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _isMapMinimized = !_isMapMinimized;
-                            });
-                          },
-                          icon: Icon(
-                            _isMapMinimized ? Icons.expand : Icons.minimize,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      "Live Map",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
+                    _buildMapControl(Icons.add, () {
+                      _mapController.move(
+                        _mapController.camera.center,
+                        _mapController.camera.zoom + 1,
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                    _buildMapControl(Icons.remove, () {
+                      _mapController.move(
+                        _mapController.camera.center,
+                        _mapController.camera.zoom - 1,
+                      );
+                    }),
+                    const SizedBox(height: 8),
+                    _buildMapControl(Icons.my_location, () {
+                      _mapController.move(_truckLocation, 12.0);
+                    }),
                   ],
                 ),
               ),
               
-              // Map
-              Expanded(
-                child: Stack(
-                  children: [
-                    LiveMapWidget(
-                      truckLocation: _truckLocation,
-                      mapController: _mapController,
-                      isMinimized: _isMapMinimized,
-                      deliveryRoute: _deliveryRoute,
-                      ports: [_manilaPort, _cebuPort, _davaoPort, _subicPort, _batangasPort],
-                      onTruckTap: _showCargoDetailsModal,
-                    ),
-                    
-                    // Map controls
-                    Positioned(
-                      bottom: 16,
-                      right: 16,
-                      child: Column(
-                        children: [
-                          _buildMapControl(Icons.add, () {
-                            _mapController.move(
-                              _mapController.camera.center,
-                              _mapController.camera.zoom + 1,
-                            );
-                          }),
-                          const SizedBox(height: 8),
-                          _buildMapControl(Icons.remove, () {
-                            _mapController.move(
-                              _mapController.camera.center,
-                              _mapController.camera.zoom - 1,
-                            );
-                          }),
-                          const SizedBox(height: 8),
-                          _buildMapControl(Icons.my_location, () {
-                            _mapController.move(_truckLocation, 12.0);
-                          }),
-                        ],
+              // Legend
+              Positioned(
+                top: 16,
+                left: 16,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
-                    
-                    // Legend
-                    Positioned(
-                      top: 16,
-                      left: 16,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              "Legend",
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF1E293B),
-                              ),
-                            ),
-                            SizedBox(height: 8),
-                            LegendItem(
-                              color: Color(0xFF10B981),
-                              label: "Available Ports",
-                            ),
-                            LegendItem(
-                              color: Color(0xFF3B82F6),
-                              label: "Destination",
-                            ),
-                            LegendItem(
-                              color: Color(0xFFF59E0B),
-                              label: "Your Location",
-                            ),
-                            LegendItem(
-                              color: Color(0xFFEF4444),
-                              label: "Delivery Route",
-                            ),
-                          ],
+                    ],
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        "Legend",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B),
                         ),
                       ),
-                    ),
-                  ],
+                      SizedBox(height: 8),
+                      LegendItem(
+                        color: Color(0xFF10B981),
+                        label: "Available Ports",
+                      ),
+                      LegendItem(
+                        color: Color(0xFF3B82F6),
+                        label: "Destination",
+                      ),
+                      LegendItem(
+                        color: Color(0xFFF59E0B),
+                        label: "Your Location",
+                      ),
+                      LegendItem(
+                        color: Color(0xFFEF4444),
+                        label: "Delivery Route",
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -735,8 +527,6 @@ class LegendItem extends StatelessWidget {
 class LiveMapWidget extends StatelessWidget {
   final LatLng? truckLocation;
   final MapController? mapController;
-  final bool isMinimized;
-  final double height;
   final List<LatLng> deliveryRoute;
   final List<LatLng> ports;
   final VoidCallback? onTruckTap;
@@ -745,8 +535,6 @@ class LiveMapWidget extends StatelessWidget {
     super.key,
     this.truckLocation,
     this.mapController,
-    this.isMinimized = false,
-    this.height = double.infinity,
     required this.deliveryRoute,
     required this.ports,
     this.onTruckTap,
@@ -756,10 +544,9 @@ class LiveMapWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final LatLng currentTruckLocation = truckLocation ?? const LatLng(14.5547, 121.0244);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      height: isMinimized ? 200 : MediaQuery.of(context).size.height - 200,
+    return Container(
       width: double.infinity,
+      height: double.infinity,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(0),
         child: FlutterMap(
